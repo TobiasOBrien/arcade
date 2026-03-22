@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Word Search — Retro Arcade</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #04000c;
+      font-family: 'Courier New', monospace;
+      color: #fff;
+      min-height: 100vh;
+      display: flex; justify-content: center; align-items: flex-start;
+      overflow-x: hidden;
+    }
+    body::after {
+      content: '';
+      position: fixed; inset: 0;
+      background: repeating-linear-gradient(transparent, transparent 3px, rgba(0,0,0,.12) 3px, rgba(0,0,0,.12) 4px);
+      pointer-events: none; z-index: 999;
+    }
+    #bgCanvas { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+
+    #app {
+      position: relative; z-index: 1;
+      width: 100%; max-width: 960px;
+      padding: 20px 20px 40px;
+      display: flex; flex-direction: column; align-items: center;
+    }
+
+    /* ── Top bar ── */
+    .top-bar {
+      width: 100%; display: flex;
+      justify-content: space-between; align-items: center;
+      margin-bottom: 6px;
+    }
+    .home-btn {
+      font-family: 'Courier New', monospace;
+      font-size: 11px; color: #444; background: transparent;
+      border: 1px solid #333; padding: 5px 12px; cursor: pointer;
+      letter-spacing: 1px; text-decoration: none;
+      transition: color .15s, border-color .15s; display: inline-block;
+    }
+    .home-btn:hover { color: #aaa; border-color: #aaa; }
+
+    /* ── Title ── */
+    .game-title {
+      font-size: clamp(24px, 4.5vw, 44px);
+      letter-spacing: 6px; text-align: center;
+      color: #ffe600;
+      text-shadow: 3px 3px 0 #ff2d78, 6px 6px 0 #cc0055, 9px 9px 0 rgba(180,0,60,.3);
+      margin: 8px 0 24px;
+    }
+
+    .screen { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 16px; }
+
+    /* ── MENU ── */
+    .menu-section-label { font-size: 9px; color: #444; letter-spacing: 4px; margin-bottom: 8px; text-align: center; }
+    .diff-btns { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+    .diff-btn {
+      padding: 10px 28px; font-family: 'Courier New', monospace;
+      font-size: 12px; letter-spacing: 3px; cursor: pointer;
+      background: #080808; border: 2px solid #333; color: #555;
+      transition: all .15s;
+    }
+    .diff-btn:hover { border-color: #ffe600; color: #ffe600; }
+    .diff-btn.easy.active  { background: #001a00; border-color: #00ff88; color: #00ff88; box-shadow: 0 0 14px #00ff8844; }
+    .diff-btn.medium.active{ background: #1a0e00; border-color: #ffaa00; color: #ffaa00; box-shadow: 0 0 14px #ffaa0044; }
+    .diff-btn.hard.active  { background: #1a0008; border-color: #ff2d78; color: #ff2d78; box-shadow: 0 0 14px #ff2d7844; }
+
+    .diff-info { font-size: 9px; color: #333; letter-spacing: 1.5px; text-align: center; min-height: 14px; }
+
+    .start-btn {
+      padding: 14px 48px; font-family: 'Courier New', monospace;
+      font-size: 15px; letter-spacing: 4px; cursor: pointer;
+      background: transparent; border: 2px solid #ffe600; color: #ffe600;
+      transition: all .15s;
+    }
+    .start-btn:hover { background: #ffe60018; box-shadow: 0 0 20px #ffe60055; }
+
+    .menu-divider { width: 100%; border: none; border-top: 1px solid #1a1a1a; max-width: 560px; }
+
+    /* ── Leaderboard ── */
+    .lb-wrap {
+      width: 100%; max-width: 560px;
+    }
+    .lb-title {
+      font-size: 9px; letter-spacing: 4px; color: #444;
+      text-align: center; margin-bottom: 10px;
+    }
+    .lb-table {
+      width: 100%; border-collapse: collapse;
+      font-size: 11px; letter-spacing: 1.5px;
+    }
+    .lb-table th {
+      font-size: 8px; color: #333; letter-spacing: 3px;
+      padding: 4px 8px; border-bottom: 1px solid #1a1a1a;
+      text-align: left;
+    }
+    .lb-table th.r { text-align: right; }
+    .lb-table td {
+      padding: 5px 8px; color: #445; border-bottom: 1px solid #0d0d0d;
+    }
+    .lb-table td.rank { color: #333; font-size: 9px; }
+    .lb-table td.name { color: #6a7090; }
+    .lb-table td.time { text-align: right; color: #3a5040; font-weight: bold; }
+    .lb-table tr.gold   td { color: #ffe600; }
+    .lb-table tr.gold   td.time { color: #ffe600; text-shadow: 0 0 8px #ffe60066; }
+    .lb-table tr.silver td { color: #aaaacc; }
+    .lb-table tr.silver td.time { color: #aaaacc; }
+    .lb-table tr.bronze td { color: #cc8844; }
+    .lb-table tr.bronze td.time { color: #cc8844; }
+    .lb-table tr.highlight td { color: #00ff88 !important; }
+    .lb-table tr.highlight td.time { text-shadow: 0 0 8px #00ff8866; }
+    .lb-empty { font-size: 9px; color: #222; letter-spacing: 3px; text-align: center; padding: 16px 0; }
+
+    /* ── GAME ── */
+    .game-layout {
+      display: flex; gap: 24px; flex-wrap: wrap;
+      justify-content: center; align-items: flex-start;
+      width: 100%;
+    }
+    .grid-wrap { user-select: none; touch-action: none; flex-shrink: 0; }
+    #wsGrid {
+      display: inline-grid; gap: 2px;
+      background: #000; border: 1px solid #0a0a1a;
+      padding: 4px; box-shadow: 0 0 20px #00f5ff14;
+    }
+    .gcell {
+      display: flex; align-items: center; justify-content: center;
+      font-weight: bold; font-family: 'Courier New', monospace;
+      border-radius: 2px; cursor: default;
+      background: #06000f; color: #3a3a5a;
+      border: 1px solid transparent; transition: background .05s, color .05s;
+    }
+    .gcell.selecting { background: #3a2200; color: #ffd700; border-color: #ffd700; }
+    .gcell.found     { background: #001a0a; color: #00ff88; border-color: #00ff8844; }
+    .gcell.found-new { background: #004422; color: #00ff88; border-color: #00ff88; box-shadow: 0 0 6px #00ff8866; }
+
+    /* ── Word panel ── */
+    .word-panel { min-width: 180px; max-width: 220px; display: flex; flex-direction: column; gap: 12px; }
+    .word-panel-title { font-size: 9px; color: #444; letter-spacing: 4px; }
+    .word-list { list-style: none; display: flex; flex-direction: column; gap: 5px; }
+    .wchip {
+      font-size: 12px; letter-spacing: 2px; padding: 4px 8px;
+      border: 1px solid #1a1a2a; color: #556; background: #06000f; transition: all .25s;
+    }
+    .wchip.found {
+      color: #00ff88; border-color: #00ff8844; background: #001a0a;
+      text-decoration: line-through; text-shadow: 0 0 6px #00ff8866;
+    }
+
+    /* ── Stats bar ── */
+    .stats-bar { display: flex; gap: 32px; justify-content: center; flex-wrap: wrap; }
+    .stat-item { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+    .stat-label { font-size: 8px; color: #333; letter-spacing: 3px; }
+    .stat-val { font-size: 22px; font-weight: bold; }
+    .stat-val.green  { color: #00ff88; text-shadow: 0 0 10px #00ff8866; }
+    .stat-val.yellow { color: #ffd700; text-shadow: 0 0 10px #ffd70066; }
+
+    /* ── Hint ── */
+    .hint { font-size: 9px; color: #222; letter-spacing: 2px; text-align: center; }
+
+    /* ── Buttons ── */
+    .action-btn {
+      padding: 10px 32px; font-family: 'Courier New', monospace;
+      font-size: 12px; letter-spacing: 3px; cursor: pointer;
+      background: #080808; border: 1px solid #333; color: #555; transition: all .15s;
+    }
+    .action-btn:hover { border-color: #aaa; color: #aaa; }
+    .action-btn.primary { border-color: #ffe600; color: #ffe600; }
+    .action-btn.primary:hover { background: #ffe60018; box-shadow: 0 0 14px #ffe60044; }
+    .btn-row { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+
+    /* ── RESULT ── */
+    #resultScreen { gap: 14px; }
+    .result-title { font-size: clamp(28px, 6vw, 54px); font-weight: bold; letter-spacing: 4px; text-align: center; }
+    .result-sub   { font-size: 11px; letter-spacing: 3px; color: #555; text-align: center; }
+    .result-time  { font-size: 20px; font-weight: bold; color: #00ff88; text-shadow: 0 0 12px #00ff8866; letter-spacing: 3px; }
+    .result-rank  { font-size: 11px; letter-spacing: 2px; color: #ffd700; text-shadow: 0 0 8px #ffd70066; min-height: 18px; text-align: center; }
+
+    /* ── Name Entry Modal ── */
+    #nameModal {
+      position: fixed; inset: 0; z-index: 100;
+      background: rgba(0,0,0,.88);
+      display: flex; align-items: center; justify-content: center;
+    }
+    #nameModal.hidden { display: none; }
+    .name-box {
+      background: #06000f;
+      border: 2px solid #cc00ff;
+      box-shadow: 0 0 40px #cc00ff44;
+      padding: 36px 40px;
+      display: flex; flex-direction: column; align-items: center; gap: 18px;
+      max-width: 380px; width: 90%;
+    }
+    .name-box h2 {
+      font-size: 13px; color: #cc00ff; letter-spacing: 3px; text-align: center;
+      text-shadow: 0 0 10px #cc00ff88;
+    }
+    .name-box .sub {
+      font-size: 9px; color: #555; letter-spacing: 2px; text-align: center; line-height: 2;
+    }
+    .name-box .rank-badge {
+      font-size: 11px; color: #ffd700; letter-spacing: 2px;
+      border: 1px solid #ffd70055; padding: 4px 16px;
+    }
+    #nameInput {
+      background: #000; border: 2px solid #cc00ff; color: #cc00ff;
+      font-family: 'Courier New', monospace;
+      font-size: 18px; letter-spacing: 6px; padding: 10px 16px;
+      text-align: center; text-transform: uppercase; width: 260px; outline: none;
+      box-shadow: 0 0 12px rgba(204,0,255,.2);
+    }
+    #nameInput::placeholder { color: #330044; letter-spacing: 3px; font-size: 12px; }
+    .name-submit {
+      padding: 10px 32px; font-family: 'Courier New', monospace;
+      font-size: 13px; letter-spacing: 3px; cursor: pointer;
+      background: transparent; border: 2px solid #cc00ff; color: #cc00ff;
+      transition: all .15s;
+    }
+    .name-submit:hover { background: #cc00ff22; box-shadow: 0 0 18px #cc00ff88; }
+    .name-skip {
+      font-size: 9px; color: #333; letter-spacing: 2px; cursor: pointer; background: none; border: none;
+      transition: color .15s;
+    }
+    .name-skip:hover { color: #777; }
+  </style>
+</head>
+<body>
+<canvas id="bgCanvas"></canvas>
+
+<!-- ── Name Entry Modal ── -->
+<div id="nameModal" class="hidden">
+  <div class="name-box">
+    <h2>NEW HIGH SCORE!</h2>
+    <div class="rank-badge" id="modalRank"></div>
+    <div class="sub" id="modalSub"></div>
+    <input id="nameInput" maxlength="12" placeholder="ENTER NAME" autocomplete="off" spellcheck="false">
+    <button class="name-submit" onclick="submitName()">SAVE SCORE</button>
+    <button class="name-skip" onclick="skipName()">SKIP</button>
+  </div>
+</div>
+
+<div id="app">
+
+  <!-- ── MENU ── -->
+  <div id="menuScreen" class="screen">
+    <div class="top-bar">
+      <a class="home-btn" href="../index.html">← ARCADE</a>
+      <span></span>
+    </div>
+    <h1 class="game-title">WORD SEARCH</h1>
+
+    <div class="menu-section-label">DIFFICULTY</div>
+    <div class="diff-btns">
+      <button class="diff-btn easy"   onclick="setDiff('easy',   this)">EASY</button>
+      <button class="diff-btn medium" onclick="setDiff('medium', this)">MEDIUM</button>
+      <button class="diff-btn hard"   onclick="setDiff('hard',   this)">HARD</button>
+    </div>
+    <div class="diff-info" id="diffInfo"></div>
+
+    <hr class="menu-divider">
+    <button class="start-btn" onclick="startGame()">START GAME</button>
+
+    <hr class="menu-divider">
+
+    <!-- Leaderboard on menu -->
+    <div class="lb-wrap">
+      <div class="lb-title" id="menuLbTitle">TOP TIMES</div>
+      <div id="menuLb"></div>
+    </div>
+
+    <a class="home-btn" href="../index.html" style="margin-top:8px">← BACK TO ARCADE</a>
+  </div>
+
+  <!-- ── GAME ── -->
+  <div id="gameScreen" class="screen" style="display:none">
+    <div class="top-bar">
+      <button class="action-btn" onclick="goMenu()">← MENU</button>
+      <div class="stats-bar">
+        <div class="stat-item">
+          <span class="stat-label">FOUND</span>
+          <span class="stat-val green" id="scFound">0</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">LEFT</span>
+          <span class="stat-val yellow" id="scLeft">0</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">TIME</span>
+          <span class="stat-val yellow" id="scTime">0:00</span>
+        </div>
+      </div>
+      <button class="action-btn" onclick="startGame()">NEW</button>
+    </div>
+
+    <div class="game-layout">
+      <div class="grid-wrap" id="gridWrap">
+        <div id="wsGrid"></div>
+      </div>
+      <div class="word-panel">
+        <div class="word-panel-title">FIND THESE WORDS</div>
+        <ul class="word-list" id="wordList"></ul>
+        <div class="hint" id="gameHint">CLICK AND DRAG TO SELECT</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── RESULT ── -->
+  <div id="resultScreen" class="screen" style="display:none">
+    <div class="top-bar">
+      <a class="home-btn" href="../index.html">← ARCADE</a>
+      <span></span>
+    </div>
+    <h1 class="game-title">WORD SEARCH</h1>
+    <div class="result-title" id="resultTitle">COMPLETE!</div>
+    <div class="result-sub"   id="resultSub"></div>
+    <div class="result-time"  id="resultTime"></div>
+    <div class="result-rank"  id="resultRank"></div>
+
+    <!-- Leaderboard on result -->
+    <div class="lb-wrap">
+      <div class="lb-title" id="resultLbTitle">TOP TIMES</div>
+      <div id="resultLb"></div>
+    </div>
+
+    <div class="btn-row">
+      <button class="action-btn primary" onclick="startGame()">PLAY AGAIN</button>
+      <button class="action-btn" onclick="goMenu()">MENU</button>
+      <a class="action-btn" href="../index.html">ARCADE</a>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ── Word Lists ───────────────────────────────────────────────────────────────
+const EASY = `BEAR BIRD BLUE BOAT BOOK BULL CAKE CAVE CITY CLAM CLAW COAT COIN CORN CRAB CROW DARK DART DEER DESK DIVE DOCK DOME DOOR DOVE DRUM DUCK DUNE DUST EAST EDGE EVIL FACE FARM FATE FEAR FIRE FISH FLAG FLAT FLOW FOAM FOLK FOOD FORK FORT FREE FUEL GAME GATE GEAR GIVE GLAD GLOW GLUE GOAL GOLD GOLF GRAY GRID GROW GULF GUST HAIL HAIR HALF HAND HANG HARD HARE HATE HAWK HEAL HEAT HERO HIDE HIKE HILL HOLE HOME HOOK HOPE HUNT IDEA IRON JADE JAZZ KEEN KICK KILL KIND KING KISS KITE KNOT KNOW LAKE LAND LARK LAST LAVA LEAD LEAF LEAP LIME LION LIVE LOAN LONG LOOP LOVE LUCK LURE MADE MAIL MAKE MALL MANE MARK MEAL MEND MILD MILK MILL MIND MINE MINT MISS MOAN MOOD MOON MOTH MOVE MUSK MYTH NAIL NAVY NECK NEXT NICE NOSE NOTE OATH OPAL ORCA OVEN OVER PACK PAID PALE PALM PARK PAST PAVE PEAK PEEL PINE PINK PIPE PITY PLAN POLE POOL PURE PUSH RACE RAGE RAIN RANT RARE RATE RAVE READ REAL RELY RICH RIDE RING RIOT ROAD ROAM ROLE ROOF ROSE RULE RUST SAFE SAIL SALT SAND SAVE SEAL SELF SEND SHIP SHOE SHOP SHOW SILK SING SITE SIZE SKIP SLIM SLOW SNOW SOAR SOIL SOUL STAR STAY STEM STEP STOP SUIT SURE SURF TAKE TALE TALL TAME TANK TIDE TILL TIME TOLL TOMB TONE TOWN TRIM TRUE TWIG TWIN UNIT VALE VINE VOID VOLT WADE WAGE WAIT WALL WARD WASH WASP WAVE WELL WEST WILD WIND WING WISE WISH WOLF WOOL WORD WORN WRAP YELL YOGA ZEAL ZONE ZOOM`.trim().split(/\s+/);
+
+const MEDIUM = `ABSENT ACCEPT ACTION ALMOST ALWAYS ANIMAL ANSWER AROUND ARTIST ASKING ATTACK BASKET BATTLE BEAUTY BEFORE BELONG BETTER BEYOND BITTER BRIDGE BRIGHT BROKEN BRONZE BURDEN CANDLE CANVAS CASTLE CAVERN CENTER CIRCLE CLEVER COFFEE COMBAT CORNER COTTON COUSIN CREDIT CRISIS CUSTOM DAMAGE DANGER DARING DEFEAT DEFEND DESIGN DIRECT DOLLAR DOUBLE DRAGON DRIVEN ENGINE ENOUGH ENTIRE ESCAPE EXCITE EXPAND EXPERT FAMOUS FATHER FIERCE FIGURE FILTER FINGER FINISH FOREST FROZEN FUTURE GATHER GENTLE GIVING GLOBAL GOBLIN GOLDEN GRAVEL GUITAR HARBOR HEAVEN HIDDEN HIGHER HONEST HUNTER IMPACT INDOOR INSECT ISLAND JUNGLE JUNIOR KERNEL KNIGHT LADDER LAUNCH LEADER LEGEND LETTER LIGHTS LINEAR LONGER MARBLE MARKET MASTER MIRROR MONKEY MORTAL NATIVE NATURE NEARLY NEEDLE NIGHTS NORMAL NOTION OBJECT OBTAIN OFFICE ONLINE OPTION ORANGE OTHERS OUTFIT PALACE PARCEL PATROL PENCIL PERIOD PILLAR PIRATE PLANET POISON POLICE POLITE POWDER PREFER PROFIT PURPLE PUZZLE RABBIT RACING RESCUE REVIEW ROCKET RUBBER SAFETY SALUTE SAYING SCHOOL SECRET SEEING SETTLE SILVER SIMPLE SINGLE SKETCH SLOWLY SMOOTH SOCIAL SOCKET SPOKEN SPRING STATUS STOLEN STRONG SUBWAY SUMMER SUNSET SUPPLY SYMBOL TALENT TARGET TENDER TERROR THEORY TIMBER TRADER TRAVEL TRIPLE TROPHY TUMBLE TUNNEL UNFAIR USEFUL VALLEY VECTOR VELVET VICTIM VIOLET VISION WINTER WISDOM WONDER WORKER`.trim().split(/\s+/);
+
+const HARD = `ABANDONED ABILITIES ABSOLUTE ABUNDANCE ACCURATE ACHIEVED ACQUIRED ACTIVITY ACTUALLY ADDITION ADEQUATE ADJACENT ADVANCED AFFECTED AGENCIES ALTHOUGH AMBITION ANALYSIS ANCESTOR ANNUALLY ANYTHING ANYWHERE APPARENT APPROACH APPROVAL ARGUABLY ASSEMBLY ASSIGNED ATTITUDE AUDIENCE BALANCED BECOMING BEHAVIOR BENEFITS BOUNDARY BREAKING BUILDING BUSINESS CALENDAR CAMPAIGN CAPACITY CATEGORY CERTAINLY CHAMPION CHANGING CHEMICAL CHILDREN CITIZENS CLINICAL COMBINED COMMENCED COMMENTS COMPARED COMPLETE COMPOSED COMPOUND CONCEPTS CONCRETE CONFLICT CONSIDER CONSTANT CONSUMED CONTAINS CREATING CRITICAL CROSSING CULTURAL CURRENCY CUSTOMER DARKNESS DATABASE DECISION DETAILED DICTATED DIRECTLY DISCOVER DISTANCE DOMINANT EDUCATED ELECTION ELECTRIC EMPHASIS EMPLOYED ENCODING ENTERING ENTIRELY EVIDENCE FAMILIAR FEATURED FINISHED FLEXIBLE FOLLOWED FUNCTION GENERATE GENEROUS GREATEST GUIDANCE HAPPENED HONESTLY IDENTITY IMMINENT INCLUDES INCREASE INHERENT INSPIRED INVOLVES JUDGMENT LIKEWISE LOCALITY MANAGING MAJORITY MARRIAGE MATERIAL MEASURES MILITARY MILLIONS MOVEMENT NATIONAL NEGATIVE NETWORKS OCCASION OFFERING OPPOSITE OUTCOMES OVERCOME PARALLEL PATIENCE PLANNING PLATFORM POSITION POSITIVE POSSIBLE PRECIOUS PRESENCE PREVIOUS PROBABLY PROBLEMS PROGRESS PROPERTY PROPOSED PROVIDED QUANTITY REACHING RECEIVED RECENTLY REDUCING RELATIVE RELEVANT REPLACED REQUIRES RESOURCE RESPONSE RESULTED RETURNED REVIEWED SECURITY SELECTED SEQUENCE SHIPPING SHORTAGE SIBLINGS SLIGHTLY SOLUTION SPEAKING SPENDING STRENGTH STRONGLY SUBJECTS SUGGESTS SUPPORTS SURVIVAL SYMPTOMS TENDENCY TOGETHER TRACKING TRAINING TRANSFER TREATING ULTIMATE UNCOMMON UPCOMING VALUABLE VARIABLE VERSIONS VIOLENCE VOLCANIC WATCHING WHATEVER WHENEVER WHEREVER WILDLIFE WRITINGS`.trim().split(/\s+/);
+
+// ── Config ───────────────────────────────────────────────────────────────────
+const CFG = {
+  easy:   { size: 10, count: 8,  maxLen: 6,  dirs: [[0,1],[1,0]],
+            label: '10×10 GRID · 8 WORDS · RIGHT & DOWN' },
+  medium: { size: 13, count: 10, maxLen: 8,  dirs: [[0,1],[1,0],[0,-1],[-1,0],[1,1],[1,-1],[-1,1],[-1,-1]],
+            label: '13×13 GRID · 10 WORDS · ALL DIRECTIONS' },
+  hard:   { size: 15, count: 12, maxLen: 10, dirs: [[0,1],[1,0],[0,-1],[-1,0],[1,1],[1,-1],[-1,1],[-1,-1]],
+            label: '15×15 GRID · 12 WORDS · ALL DIRECTIONS' },
+};
+
+const LB_KEY   = 'ws_leaderboard_v1';
+const LB_MAX   = 10;
+
+// ── Leaderboard (localStorage) ───────────────────────────────────────────────
+function loadLB() {
+  try { return JSON.parse(localStorage.getItem(LB_KEY)) || { easy: [], medium: [], hard: [] }; }
+  catch { return { easy: [], medium: [], hard: [] }; }
+}
+function saveLB(lb) {
+  localStorage.setItem(LB_KEY, JSON.stringify(lb));
+}
+
+// Returns 1-based rank if the time qualifies, null otherwise
+function checkRank(diff, time) {
+  const lb = loadLB();
+  const list = lb[diff] || [];
+  if (list.length < LB_MAX || time < list[list.length - 1].time) {
+    // Find where it would insert
+    let rank = 1;
+    for (const entry of list) { if (time >= entry.time) rank++; else break; }
+    return rank;
+  }
+  return null;
+}
+
+function insertScore(diff, name, time) {
+  const lb = loadLB();
+  const list = lb[diff] || [];
+  list.push({ name: name || 'UNKNOWN', time });
+  list.sort((a, b) => a.time - b.time);
+  lb[diff] = list.slice(0, LB_MAX);
+  saveLB(lb);
+}
+
+// ── State ────────────────────────────────────────────────────────────────────
+let S = {
+  phase: 'menu',
+  difficulty: 'medium',
+  grid: [],
+  words: [],
+  gridSize: 13,
+  selActive: false,
+  selStart: null,
+  selEnd: null,
+  found: 0,
+  elapsed: 0,
+  timerInterval: null,
+  pendingRank: null,   // rank that qualified, waiting for name entry
+};
+
+// ── Grid Generation ──────────────────────────────────────────────────────────
+function generateGrid(words, size, dirs) {
+  const grid = Array.from({length: size}, () => Array(size).fill(''));
+  const placed = [];
+
+  for (const word of words) {
+    let ok = false;
+    for (let attempt = 0; attempt < 300 && !ok; attempt++) {
+      const [dr, dc] = dirs[Math.floor(Math.random() * dirs.length)];
+      const rMin = dr < 0 ? word.length - 1 : 0;
+      const rMax = dr > 0 ? size - word.length : size - 1;
+      const cMin = dc < 0 ? word.length - 1 : 0;
+      const cMax = dc > 0 ? size - word.length : size - 1;
+      if (rMin > rMax || cMin > cMax) continue;
+
+      const r = rMin + Math.floor(Math.random() * (rMax - rMin + 1));
+      const c = cMin + Math.floor(Math.random() * (cMax - cMin + 1));
+      const cells = [];
+      let conflict = false;
+      for (let i = 0; i < word.length; i++) {
+        const nr = r + dr * i, nc = c + dc * i;
+        if (grid[nr][nc] !== '' && grid[nr][nc] !== word[i]) { conflict = true; break; }
+        cells.push([nr, nc]);
+      }
+      if (!conflict) {
+        cells.forEach(([nr, nc], i) => grid[nr][nc] = word[i]);
+        placed.push({ word, cells, found: false });
+        ok = true;
+      }
+    }
+    if (!ok) return null;
+  }
+
+  const alpha = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  for (let r = 0; r < size; r++)
+    for (let c = 0; c < size; c++)
+      if (!grid[r][c]) grid[r][c] = alpha[Math.floor(Math.random() * 26)];
+
+  return { grid, placed };
+}
+
+function buildGame() {
+  const cfg = CFG[S.difficulty];
+  const pool = S.difficulty === 'easy' ? EASY : S.difficulty === 'medium' ? MEDIUM : HARD;
+  const eligible = pool.filter(w => w.length >= 4 && w.length <= cfg.maxLen);
+  const shuffled = [...eligible].sort(() => Math.random() - 0.5);
+  const chosen = shuffled.slice(0, cfg.count);
+  for (let i = 0; i < 10; i++) {
+    const result = generateGrid(chosen, cfg.size, cfg.dirs);
+    if (result) return result;
+  }
+  return null;
+}
+
+// ── Selection ────────────────────────────────────────────────────────────────
+function lineOf(start, end) {
+  if (!start || !end) return [];
+  const [r1, c1] = start, [r2, c2] = end;
+  const dr = r2 - r1, dc = c2 - c1;
+  if (dr !== 0 && dc !== 0 && Math.abs(dr) !== Math.abs(dc)) return [];
+  const len = Math.max(Math.abs(dr), Math.abs(dc));
+  const sr = Math.sign(dr), sc = Math.sign(dc);
+  const cells = [];
+  for (let i = 0; i <= len; i++) cells.push([r1 + sr * i, c1 + sc * i]);
+  return cells;
+}
+
+function wordOf(cells) { return cells.map(([r, c]) => S.grid[r][c]).join(''); }
+
+function tryFind(cells) {
+  if (cells.length < 2) return null;
+  const fwd = wordOf(cells), bwd = fwd.split('').reverse().join('');
+  return S.words.find(w => !w.found && (w.word === fwd || w.word === bwd)) || null;
+}
+
+// ── Grid Rendering ───────────────────────────────────────────────────────────
+function renderGrid() {
+  const cellPx = S.gridSize <= 10 ? 34 : S.gridSize <= 13 ? 27 : 22;
+  const el = document.getElementById('wsGrid');
+  el.style.gridTemplateColumns = `repeat(${S.gridSize}, ${cellPx}px)`;
+  el.innerHTML = '';
+
+  for (let r = 0; r < S.gridSize; r++) {
+    for (let c = 0; c < S.gridSize; c++) {
+      const d = document.createElement('div');
+      d.className = 'gcell';
+      d.style.cssText = `width:${cellPx}px;height:${cellPx}px;font-size:${Math.floor(cellPx*.48)}px`;
+      d.textContent = S.grid[r][c];
+      d.dataset.r = r; d.dataset.c = c;
+      d.id = `gc-${r}-${c}`;
+      el.appendChild(d);
+    }
+  }
+
+  const wrap = document.getElementById('gridWrap');
+  wrap.onmousedown = e => { e.preventDefault(); const p = cellAt(e.target); if (p) { S.selActive = true; S.selStart = p; S.selEnd = p; paint(lineOf(p, p)); } };
+  wrap.onmousemove = e => { if (!S.selActive) return; const p = cellAt(e.target); if (p) { S.selEnd = p; paint(lineOf(S.selStart, p)); } };
+  wrap.onmouseup   = e => { if (!S.selActive) return; S.selActive = false; confirmSel(lineOf(S.selStart, S.selEnd)); };
+  document.addEventListener('mouseup', () => { if (S.selActive) { S.selActive = false; clearSel(); } });
+  wrap.ontouchstart = e => { e.preventDefault(); const p = ptToCell(e.touches[0]); if (p) { S.selActive = true; S.selStart = p; S.selEnd = p; paint(lineOf(p, p)); } };
+  wrap.ontouchmove  = e => { e.preventDefault(); if (!S.selActive) return; const p = ptToCell(e.touches[0]); if (p) { S.selEnd = p; paint(lineOf(S.selStart, p)); } };
+  wrap.ontouchend   = e => { e.preventDefault(); if (!S.selActive) return; S.selActive = false; confirmSel(lineOf(S.selStart, S.selEnd)); };
+}
+
+function cellAt(el) {
+  const c = el.closest?.('.gcell') || (el.classList?.contains('gcell') ? el : null);
+  return c ? [+c.dataset.r, +c.dataset.c] : null;
+}
+function ptToCell(touch) {
+  const el = document.elementFromPoint(touch.clientX, touch.clientY);
+  return el ? cellAt(el) : null;
+}
+function paint(cells) {
+  document.querySelectorAll('.gcell.selecting').forEach(e => e.classList.remove('selecting'));
+  for (const [r, c] of cells) {
+    const el = document.getElementById(`gc-${r}-${c}`);
+    if (el && !el.classList.contains('found') && !el.classList.contains('found-new'))
+      el.classList.add('selecting');
+  }
+}
+function clearSel() {
+  document.querySelectorAll('.gcell.selecting').forEach(e => e.classList.remove('selecting'));
+}
+function confirmSel(cells) {
+  clearSel();
+  const match = tryFind(cells);
+  if (!match) return;
+  match.found = true; S.found++;
+  for (const [r, c] of match.cells) {
+    const el = document.getElementById(`gc-${r}-${c}`);
+    if (el) { el.classList.remove('selecting'); el.classList.add('found-new'); }
+  }
+  const chip = document.getElementById(`wc-${match.word}`);
+  if (chip) chip.classList.add('found');
+  setTimeout(() => {
+    for (const [r, c] of match.cells) {
+      const el = document.getElementById(`gc-${r}-${c}`);
+      if (el) { el.classList.remove('found-new'); el.classList.add('found'); }
+    }
+  }, 600);
+  updateStats();
+  if (S.found === S.words.length) setTimeout(endGame, 400);
+}
+
+function renderWordList() {
+  const el = document.getElementById('wordList');
+  el.innerHTML = '';
+  for (const w of S.words) {
+    const li = document.createElement('li');
+    li.className = 'wchip' + (w.found ? ' found' : '');
+    li.id = `wc-${w.word}`;
+    li.textContent = w.word;
+    el.appendChild(li);
+  }
+}
+function updateStats() {
+  document.getElementById('scFound').textContent = S.found;
+  document.getElementById('scLeft').textContent  = S.words.length - S.found;
+}
+
+// ── Timer ────────────────────────────────────────────────────────────────────
+function startTimer() {
+  S.elapsed = 0;
+  if (S.timerInterval) clearInterval(S.timerInterval);
+  S.timerInterval = setInterval(() => {
+    S.elapsed++;
+    const m = Math.floor(S.elapsed / 60), s = S.elapsed % 60;
+    const el = document.getElementById('scTime');
+    if (el) el.textContent = `${m}:${s.toString().padStart(2,'0')}`;
+  }, 1000);
+}
+function stopTimer() {
+  if (S.timerInterval) { clearInterval(S.timerInterval); S.timerInterval = null; }
+}
+function fmtTime(sec) {
+  const m = Math.floor(sec / 60), s = sec % 60;
+  return `${m}:${s.toString().padStart(2,'0')}`;
+}
+
+// ── Leaderboard Rendering ────────────────────────────────────────────────────
+function renderLB(containerId, diff, highlightTime = null) {
+  const lb    = loadLB();
+  const list  = lb[diff] || [];
+  const title = document.getElementById(containerId === 'menuLb' ? 'menuLbTitle' : 'resultLbTitle');
+  if (title) title.textContent = `TOP TIMES — ${diff.toUpperCase()}`;
+
+  const el = document.getElementById(containerId);
+  if (!list.length) {
+    el.innerHTML = `<div class="lb-empty">NO TIMES YET — BE THE FIRST!</div>`;
+    return;
+  }
+
+  const medals = ['gold','silver','bronze'];
+  let html = `<table class="lb-table">
+    <tr><th>#</th><th>NAME</th><th class="r">TIME</th></tr>`;
+  for (let i = 0; i < list.length; i++) {
+    const e   = list[i];
+    const cls = medals[i] || (highlightTime !== null && e.time === highlightTime ? 'highlight' : '');
+    // If highlight by time matches and no medal, still check
+    const rowCls = highlightTime !== null && e.time === highlightTime && i >= 3 ? 'highlight' : (medals[i] || '');
+    html += `<tr class="${rowCls}">
+      <td class="rank">${i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i+1}`}</td>
+      <td class="name">${e.name}</td>
+      <td class="time">${fmtTime(e.time)}</td>
+    </tr>`;
+  }
+  html += '</table>';
+  el.innerHTML = html;
+}
+
+// ── Name Entry Modal ─────────────────────────────────────────────────────────
+function openNameModal(rank, diff, time) {
+  S.pendingRank = { rank, diff, time };
+  document.getElementById('modalRank').textContent = `RANK #${rank} — ${diff.toUpperCase()}`;
+  document.getElementById('modalSub').textContent  = `YOUR TIME: ${fmtTime(time)}\nENTER YOUR NAME TO SAVE YOUR SCORE`;
+  document.getElementById('nameInput').value = '';
+  document.getElementById('nameModal').classList.remove('hidden');
+  setTimeout(() => document.getElementById('nameInput').focus(), 80);
+}
+
+function closeNameModal() {
+  document.getElementById('nameModal').classList.add('hidden');
+}
+
+function submitName() {
+  if (!S.pendingRank) return;
+  const raw  = document.getElementById('nameInput').value.trim().toUpperCase();
+  const name = raw || 'UNKNOWN';
+  insertScore(S.pendingRank.diff, name, S.pendingRank.time);
+  closeNameModal();
+  showResult(S.pendingRank.rank);
+  S.pendingRank = null;
+}
+
+function skipName() {
+  if (!S.pendingRank) return;
+  const { rank } = S.pendingRank;
+  S.pendingRank = null;
+  closeNameModal();
+  showResult(rank);
+}
+
+document.getElementById('nameInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') submitName();
+  if (e.key === 'Escape') skipName();
+});
+
+// ── Game Flow ────────────────────────────────────────────────────────────────
+function startGame() {
+  stopTimer();
+  S.found = 0;
+  const result = buildGame();
+  if (!result) { alert('Could not generate grid. Try again.'); return; }
+  S.grid     = result.grid;
+  S.words    = result.placed;
+  S.gridSize = CFG[S.difficulty].size;
+  S.phase    = 'game';
+  showScreen('gameScreen');
+  renderGrid();
+  renderWordList();
+  updateStats();
+  document.getElementById('gameHint').textContent = CFG[S.difficulty].dirs.length > 2
+    ? 'CLICK AND DRAG · WORDS GO ANY DIRECTION'
+    : 'CLICK AND DRAG · WORDS GO RIGHT OR DOWN';
+  startTimer();
+}
+
+function endGame() {
+  stopTimer();
+  S.phase = 'result';
+  const rank = checkRank(S.difficulty, S.elapsed);
+  if (rank !== null) {
+    // Qualifies — ask for name before showing result
+    showScreen('resultScreen');  // show result behind modal
+    openNameModal(rank, S.difficulty, S.elapsed);
+  } else {
+    showResult(null);
+  }
+}
+
+function showResult(newRank) {
+  showScreen('resultScreen');
+
+  document.getElementById('resultTitle').textContent = 'COMPLETE!';
+  document.getElementById('resultTitle').style.color = '#00ff88';
+  document.getElementById('resultTitle').style.textShadow = '0 0 20px #00ff8888';
+  document.getElementById('resultSub').textContent =
+    `${S.difficulty.toUpperCase()} · ${S.words.length} WORDS`;
+  document.getElementById('resultTime').textContent = fmtTime(S.elapsed);
+
+  if (newRank !== null) {
+    document.getElementById('resultRank').textContent = `⭐ RANK #${newRank} ON THE LEADERBOARD!`;
+  } else {
+    const lb   = loadLB();
+    const list = lb[S.difficulty] || [];
+    const best = list.length ? list[0].time : null;
+    document.getElementById('resultRank').textContent =
+      best !== null ? `BEST: ${fmtTime(best)}` : '';
+  }
+
+  renderLB('resultLb', S.difficulty, S.elapsed);
+}
+
+function goMenu() {
+  stopTimer();
+  S.phase = 'menu';
+  renderLB('menuLb', S.difficulty);
+  showScreen('menuScreen');
+}
+
+function showScreen(id) {
+  ['menuScreen','gameScreen','resultScreen'].forEach(s => {
+    document.getElementById(s).style.display = s === id ? 'flex' : 'none';
+  });
+}
+
+// ── Menu Controls ────────────────────────────────────────────────────────────
+function setDiff(d, btn) {
+  S.difficulty = d;
+  document.querySelectorAll('.diff-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  document.getElementById('diffInfo').textContent = CFG[d].label;
+  renderLB('menuLb', d);
+}
+
+// ── BG Canvas ────────────────────────────────────────────────────────────────
+(function() {
+  const cv = document.getElementById('bgCanvas');
+  const cx = cv.getContext('2d');
+  const stars = Array.from({length: 120}, () => ({
+    x: Math.random(), y: Math.random(),
+    r: Math.random() * 1.2 + 0.2,
+    a: Math.random(), da: (Math.random() - 0.5) * 0.008,
+  }));
+  function resize() { cv.width = window.innerWidth; cv.height = window.innerHeight; }
+  resize(); window.addEventListener('resize', resize);
+  function frame() {
+    cx.clearRect(0, 0, cv.width, cv.height);
+    for (const s of stars) {
+      s.a += s.da;
+      if (s.a < 0 || s.a > 1) s.da *= -1;
+      cx.globalAlpha = s.a * 0.5; cx.fillStyle = '#8888ff';
+      cx.beginPath(); cx.arc(s.x * cv.width, s.y * cv.height, s.r, 0, Math.PI * 2); cx.fill();
+    }
+    cx.globalAlpha = 1; requestAnimationFrame(frame);
+  }
+  frame();
+})();
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+setDiff('medium', document.querySelector('.diff-btn.medium'));
+showScreen('menuScreen');
+</script>
+</body>
+</html>

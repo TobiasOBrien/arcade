@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hangman — Retro Arcade</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #04000c;
+      font-family: 'Courier New', monospace;
+      color: #fff;
+      min-height: 100vh;
+      display: flex; justify-content: center; align-items: flex-start;
+      overflow-x: hidden;
+    }
+    body::after {
+      content: '';
+      position: fixed; inset: 0;
+      background: repeating-linear-gradient(transparent, transparent 3px, rgba(0,0,0,.12) 3px, rgba(0,0,0,.12) 4px);
+      pointer-events: none; z-index: 999;
+    }
+    #bgCanvas { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+
+    #app {
+      position: relative; z-index: 1;
+      width: 100%; max-width: 860px;
+      padding: 20px 20px 40px;
+      display: flex; flex-direction: column; align-items: center;
+    }
+
+    /* ── Top bar ── */
+    .top-bar {
+      width: 100%; display: flex;
+      justify-content: space-between; align-items: center;
+      margin-bottom: 6px;
+    }
+    .home-btn {
+      font-family: 'Courier New', monospace;
+      font-size: 11px; color: #444; background: transparent;
+      border: 1px solid #333; padding: 5px 12px; cursor: pointer;
+      letter-spacing: 1px; transition: color .15s, border-color .15s;
+    }
+    .home-btn:hover { color: #aaa; border-color: #aaa; }
+    .mode-badge { font-size: 9px; color: #333; letter-spacing: 2px; }
+    .score-bar { font-size: 11px; letter-spacing: 2px; }
+    .score-bar .w { color: #00ff88; } .score-bar .l { color: #ff2d78; }
+
+    /* ── Title ── */
+    .game-title {
+      font-size: clamp(26px, 5vw, 48px);
+      letter-spacing: 8px; text-align: center;
+      color: #ffe600;
+      text-shadow: 3px 3px 0 #ff2d78, 6px 6px 0 #cc0055, 9px 9px 0 rgba(180,0,60,.3);
+      margin: 8px 0 28px;
+    }
+
+    /* ── Screen base ── */
+    .screen { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 20px; }
+
+    /* ── MENU ── */
+    .mode-grid { display: flex; gap: 18px; flex-wrap: wrap; justify-content: center; }
+    .mode-btn {
+      width: 210px; padding: 22px 14px;
+      background: rgba(0,0,0,.7);
+      border: 2px solid #ffe600;
+      box-shadow: 0 0 10px rgba(255,230,0,.25);
+      color: #ffe600; cursor: pointer;
+      font-family: 'Courier New', monospace;
+      font-size: 13px; letter-spacing: 2px;
+      display: flex; flex-direction: column; align-items: center; gap: 10px;
+      transition: transform .2s, box-shadow .2s;
+    }
+    .mode-btn:hover { transform: translateY(-4px); box-shadow: 0 0 22px rgba(255,230,0,.55); }
+    .mode-btn .icon { font-size: 26px; }
+    .mode-btn .desc { font-size: 8.5px; color: #666; letter-spacing: 1px; line-height: 1.8; text-align: center; }
+    .arcade-link { font-size: 10px; color: #333; text-decoration: none; letter-spacing: 2px; margin-top: 10px; }
+    .arcade-link:hover { color: #666; }
+    /* ── Difficulty & Reset ── */
+    .menu-section-label { font-size: 9px; color: #444; letter-spacing: 4px; margin-bottom: 2px; }
+    .diff-btns { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+    .diff-btn {
+      padding: 10px 28px; font-family: 'Courier New', monospace;
+      font-size: 12px; letter-spacing: 3px; cursor: pointer;
+      background: #080808; border: 2px solid #333; color: #555;
+      transition: all .15s;
+    }
+    .diff-btn:hover { border-color: #ffe600; color: #ffe600; }
+    .diff-btn.active { background: #1a1400; border-color: #ffe600; color: #ffe600; box-shadow: 0 0 14px #ffe60055; }
+    .diff-btn.easy   { --dc: #00ff88; }
+    .diff-btn.medium { --dc: #ffaa00; }
+    .diff-btn.hard   { --dc: #ff2d78; }
+    .diff-btn.easy.active  { background: #001a00; border-color: #00ff88; color: #00ff88; box-shadow: 0 0 14px #00ff8844; }
+    .diff-btn.medium.active{ background: #1a0e00; border-color: #ffaa00; color: #ffaa00; box-shadow: 0 0 14px #ffaa0044; }
+    .diff-btn.hard.active  { background: #1a0008; border-color: #ff2d78; color: #ff2d78; box-shadow: 0 0 14px #ff2d7844; }
+    .menu-divider { width: 100%; border: none; border-top: 1px solid #1a1a1a; max-width: 600px; }
+
+    /* ── WORD ENTRY ── */
+    #wordEntryScreen h2 { font-size: 13px; color: #00f5ff; letter-spacing: 3px; }
+    #wordEntryScreen p  { font-size: 9px; color: #444; letter-spacing: 2px; }
+    #wordInput {
+      background: #000; border: 2px solid #00f5ff; color: #00f5ff;
+      font-family: 'Courier New', monospace;
+      font-size: 22px; letter-spacing: 10px; padding: 12px 20px;
+      text-align: center; text-transform: uppercase; width: 300px; outline: none;
+      box-shadow: 0 0 12px rgba(0,245,255,.25);
+    }
+    #wordInput::placeholder { color: #114; letter-spacing: 4px; font-size: 14px; }
+    #wordError { font-size: 9px; color: #ff4444; letter-spacing: 2px; min-height: 14px; }
+    .confirm-btn {
+      padding: 10px 32px; font-family: 'Courier New', monospace;
+      font-size: 13px; letter-spacing: 3px; background: transparent;
+      border: 2px solid #00f5ff; color: #00f5ff; cursor: pointer; transition: all .15s;
+    }
+    .confirm-btn:hover { background: #00f5ff22; box-shadow: 0 0 15px #00f5ff; }
+
+    /* ── HANDOFF ── */
+    #handoffScreen h2 { font-size: 14px; color: #ffe600; letter-spacing: 3px; }
+    #handoffScreen p  { font-size: 10px; color: #555; letter-spacing: 2px; line-height: 2; }
+
+    /* ── GAME ── */
+    .game-layout {
+      display: flex; gap: 24px; flex-wrap: wrap;
+      justify-content: center; align-items: flex-start;
+      width: 100%;
+    }
+    #hangCanvas {
+      border: 1px solid #0a0a1a; background: #00000a;
+      box-shadow: 0 0 20px #00ffff14; flex-shrink: 0;
+    }
+    .game-right {
+      flex: 1; min-width: 260px; max-width: 420px;
+      display: flex; flex-direction: column; gap: 16px; padding-top: 4px;
+    }
+
+    /* Word display */
+    #wordDisplay { display: flex; gap: 8px; flex-wrap: wrap; }
+    .slot {
+      width: 28px; height: 36px;
+      border-bottom: 2px solid #444;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px; font-weight: bold; letter-spacing: 0;
+      transition: color .25s, border-color .25s;
+    }
+    .slot.space { border-color: transparent; width: 14px; }
+    .slot.hit   { color: #00ff88; border-color: #00ff88; text-shadow: 0 0 8px #00ff88; }
+    .slot.shown { color: #ff2d78; border-color: #ff2d78; text-shadow: 0 0 8px #ff2d78; }
+
+    /* Wrong count */
+    .wrong-head { font-size: 9px; color: #555; letter-spacing: 2px; margin-bottom: 6px; }
+    #wrongDisplay { display: flex; flex-wrap: wrap; gap: 8px; min-height: 20px; }
+    .wletter { font-size: 15px; color: #ff2d78; text-shadow: 0 0 6px #ff2d78; }
+
+    /* Remaining guesses bar */
+    .guess-bar { display: flex; gap: 4px; }
+    .guess-pip {
+      width: 16px; height: 8px; background: #00ff88;
+      transition: background .3s, box-shadow .3s;
+    }
+    .guess-pip.used { background: #220011; }
+    .guess-pip.danger { background: #ff2d78; box-shadow: 0 0 5px #ff2d78; }
+
+
+    /* Letter grid */
+    #letterGrid { display: flex; flex-direction: column; gap: 7px; width: 100%; }
+    .lrow { display: flex; gap: 6px; justify-content: center; }
+    .lbtn {
+      width: 48px; height: 42px;
+      background: #080808; border: 1px solid #2a2a2a;
+      color: #777; font-family: 'Courier New', monospace;
+      font-size: 14px; font-weight: bold; cursor: pointer;
+      transition: all .1s;
+    }
+    .lbtn:hover:not(:disabled):not(.hit):not(.miss) {
+      background: #ffe60018; border-color: #ffe600;
+      color: #ffe600; box-shadow: 0 0 8px #ffe60055;
+    }
+    .lbtn.hit  { background: #002200; border-color: #00ff88; color: #00ff88; box-shadow: 0 0 5px #00ff8833; cursor: default; }
+    .lbtn.miss { background: #100008; border-color: #330011; color: #330011; cursor: default; }
+    .lbtn:disabled { cursor: default; }
+
+    /* ── RESULT ── */
+    #resultScreen h2 { font-size: 30px; letter-spacing: 5px; text-align: center; }
+    .word-was { font-size: 10px; color: #555; letter-spacing: 2px; }
+    .word-was span { color: #ffe600; font-size: 22px; letter-spacing: 6px; display: block; margin-top: 6px; text-shadow: 0 0 10px #ffe60066; }
+    .result-btns { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; }
+    .rbtn {
+      padding: 10px 26px; font-family: 'Courier New', monospace;
+      font-size: 11px; letter-spacing: 2px; background: transparent;
+      border: 2px solid #ffe600; color: #ffe600; cursor: pointer; transition: all .15s;
+    }
+    .rbtn:hover { background: #ffe60022; box-shadow: 0 0 15px #ffe600; }
+    .rbtn.dim { border-color: #333; color: #444; }
+    .rbtn.dim:hover { border-color: #666; color: #666; box-shadow: none; }
+
+
+    .hidden { display: none !important; }
+    .sep { color: #222; font-size: 8px; letter-spacing: 6px; margin: 4px 0; }
+  </style>
+</head>
+<body>
+<canvas id="bgCanvas"></canvas>
+<div id="app">
+
+  <div class="top-bar">
+    <button class="home-btn" onclick="location.href='../index.html'">◀ ARCADE</button>
+    <div class="mode-badge" id="modeBadge">SELECT A MODE</div>
+    <div class="score-bar">W<span class="w" id="winsEl">0</span> &nbsp; L<span class="l" id="lossEl">0</span></div>
+  </div>
+
+  <h1 class="game-title">HANGMAN</h1>
+
+  <!-- MENU -->
+  <div id="menuScreen" class="screen">
+
+    <div class="mode-grid">
+      <button class="mode-btn" onclick="selectMode('1p')">
+        <span class="icon">[ P ]</span>
+        <span>P VS AI</span>
+        <span class="desc">YOU GUESS THE WORD<br>THE COMPUTER PICKED</span>
+      </button>
+      <button class="mode-btn" onclick="selectMode('2p')">
+        <span class="icon">[ P P ]</span>
+        <span>TWO PLAYERS</span>
+        <span class="desc">P1 ENTERS A WORD<br>P2 TRIES TO GUESS IT</span>
+      </button>
+    </div>
+
+    <hr class="menu-divider">
+
+    <div class="menu-section-label">DIFFICULTY</div>
+    <div class="diff-btns">
+      <button class="diff-btn easy active" id="diffEasy"   onclick="setDifficulty('easy',this)">EASY</button>
+      <button class="diff-btn medium"      id="diffMedium" onclick="setDifficulty('medium',this)">MEDIUM</button>
+      <button class="diff-btn hard"        id="diffHard"   onclick="setDifficulty('hard',this)">HARD</button>
+    </div>
+
+    <a class="arcade-link" href="../index.html">◀ BACK TO ARCADE</a>
+  </div>
+
+  <!-- WORD ENTRY -->
+  <div id="wordEntryScreen" class="screen hidden">
+    <h2>PLAYER 1 — ENTER YOUR WORD</h2>
+    <p>PLAYER 2, LOOK AWAY FROM THE SCREEN!</p>
+    <input id="wordInput" type="password" maxlength="24" placeholder="TYPE WORD HERE" autocomplete="off"
+      oninput="this.value=this.value.replace(/[^a-zA-Z ]/g,'').toUpperCase()"
+      onkeydown="if(event.key==='Enter') confirmWord()">
+    <div id="wordError">&nbsp;</div>
+    <button class="confirm-btn" onclick="confirmWord()">CONFIRM ▶</button>
+    <a class="arcade-link" href="#" onclick="goMenu();return false;">◀ BACK TO MENU</a>
+  </div>
+
+  <!-- HANDOFF (2P) -->
+  <div id="handoffScreen" class="screen hidden">
+    <h2>PLAYER 1 IS READY</h2>
+    <p>PASS THE DEVICE TO PLAYER 2<br>THEN PRESS READY</p>
+    <button class="confirm-btn" onclick="startGameFromHandoff()">▶ READY — START GAME</button>
+  </div>
+
+  <!-- GAME -->
+  <div id="gameScreen" class="screen hidden">
+    <div class="game-layout">
+      <canvas id="hangCanvas" width="220" height="290"></canvas>
+      <div class="game-right">
+        <div id="wordDisplay"></div>
+        <div>
+          <div class="wrong-head" id="wrongTitle">WRONG  0 / 6</div>
+          <div id="wrongDisplay"></div>
+        </div>
+        <div class="guess-bar" id="guessPips"></div>
+      </div>
+    </div>
+    <div id="letterGrid"></div>
+  </div>
+
+  <!-- RESULT -->
+  <div id="resultScreen" class="screen hidden">
+    <h2 id="resultTitle"></h2>
+    <div class="word-was">THE WORD WAS:<span id="resultWord"></span></div>
+    <div class="result-btns">
+      <button class="rbtn" onclick="newGame()">NEW GAME</button>
+      <button class="rbtn dim" onclick="goMenu()">CHANGE MODE</button>
+      <button class="rbtn dim" onclick="location.href='../index.html'">◀ ARCADE</button>
+    </div>
+  </div>
+
+</div>
+<script>
+// ── WORD LIST (~2500 words: easy / medium / hard) ─────────────────────────────
+const EASY = `ABLE ACHE ACID AGED ARCH AREA ARMY ARTS AUNT AXLE BABY BACK BAIL BAIT BAKE BALD BALL BALM BAND BANE BANK BARE BARK BARN BASE BASH BATH BEAD BEAM BEAN BEAR BEAT BEEF BEER BELL BELT BEND BEST BILL BIND BIRD BITE BLOW BLUE BLUR BOAR BOAT BOLD BOLT BOMB BOND BONE BOOK BOOM BOOT BORE BORN BOSS BOWL BULB BULL BUMP BURN BUSY BUZZ CAGE CAKE CALF CALL CALM CAME CAMP CANE CAPE CARD CARE CARP CART CAST CAVE CELL CENT CHIP CHOP CITY CLAM CLAP CLAW CLAY CLIP CLUB COAL COAT COIL COIN COLD COLT COMB COME CONE COOK COOL COPE COPY CORD CORE CORN COST CRAB CRAM CROW CUBE CURB CURE CURL DAMP DARE DARK DART DASH DAWN DEAD DEAL DEAR DEBT DECK DEED DEEP DEER DIAL DICE DIET DIME DIRE DIRT DISH DISK DIVE DOCK DOME DONE DOOR DOSE DOVE DOWN DRAW DRUM DUAL DUEL DUNE DUSK DUST DUTY EACH EDGE ELSE ENVY EPIC EVEN EVER EVIL EXAM FACE FACT FAIL FAIR FALL FAME FANG FARM FAST FATE FEAT FEEL FEET FELL FELT FEND FERN FILL FILM FIND FINE FIRE FIRM FISH FIST FLAG FLAT FLAW FLEA FLED FLEW FLIP FLOW FOAM FOLD FOLK FOND FONT FOOD FOOL FORD FORK FORM FORT FOUL FOWL FROG FUEL FULL GAME GANG GASH GATE GAVE GEAR GIFT GILL GIVE GLAD GLEE GLOB GLOW GLUE GNAW GOAL GOES GOLD GONE GOOD GORE GRAB GRAM GRIT GROW GUST GUTS HACK HAIL HAIR HALF HALL HALT HAND HANG HARD HARE HARM HARP HASH HATE HAZE HEAD HEAL HEAP HEAR HEAT HEEL HELL HERB HERD HIDE HIKE HILL HILT HINT HIRE HIVE HOLD HOLE HOLY HOME HOOD HOOK HOOP HOPE HORN HOSE HOST HUGE HULL HUMP HUNG IDLE INCH IRON ISLE ITEM JACK JADE JAIL JAWS JEST JILT JINX JOIN JOKE JOLT JUMP JUST KEEN KELP KEPT KICK KIND KING KNOB KNOT KNOW LACK LAID LAKE LAMB LAME LAMP LAND LANE LARD LARK LASH LAST LATE LAWN LEAD LEAF LEAK LEAN LEAP LEER LEFT LEND LENS LEVY LICK LIFT LIME LIMP LINE LINK LION LIPS LIST LIVE LOAD LOBE LOCK LOFT LONE LONG LOOK LOOP LORE LOSE LOST LOUD LOVE LUCK LULL LUMP LUNG LURE LUSH LUST MACE MADE MAIL MAIN MAKE MALE MANE MANY MARE MARK MART MAST MATE MEAN MEET MELT MERE MESH MILD MILE MILL MINE MINT MOAN MOAT MOCK MOLE MOPE MOSS MOST MOVE MUCH MULE MYTH NAIL NAME NAVY NEED NEWS NEXT NICE NICK NODE NONE NORM NOTE NOUN NUMB OATH OBEY ODDS OMEN ONCE ONLY OPEN OVEN OWED PACK PACE PAID PAIN PAIR PALE PALM PANT PARK PAST PAVE PAWN PEAK PEAR PEAT PEEL PEEP PEER PELT PERK PEST PICK PIER PILE PILL PINE PINK PIPE PITY PLAN PLAY PLOT PLOW PLUM POET POLE POLL POLO POND POSE POST POUT PREY PROD PROP PULL PULP PUMP PURE PUSH RACE RACK RAGE RAID RAIL RAIN RAKE RAMP RANG RANK RANT RASH RASP RATE RAVE READ REAL REAP REEL RENT RELY RICE RICH RIDE RIND RING RIOT RIPE RISE ROAM ROAR ROBE ROLE ROLL ROOF ROOM ROOT ROPE ROSE ROUT RUIN RULE RUSE RUSH RUST SAGE SAIL SAKE SALE SALT SANG SANE SANK SASH SAVE SEAM SEEP SELL SEND SHED SHIN SHIP SHOP SHOT SHUN SHUT SIDE SIGH SILK SING SINK SIRE SITE SKIN SKIP SLAB SLAP SLIM SLIP SLOT SLOW SLUG SNAP SOAR SOCK SOFA SOLD SOLE SOME SONG SOON SORE SORT SOUL SOUR SPAN SPIT SPOT STAR STEM STEP STOP STUB STUD SUCK SURE SWAP SWAY SWIM TALE TALL TANK TAPE TART TEAM TEAR TEST THIN TIDE TIED TIER TILE TILL TILT TIME TIRE TOAD TOIL TOLD TOLL TOMB TONE TOOK TOOL TORE TORN TOSS TOUR TOWN TRAP TRAY TREE TRIM TRIO TRIP TROT TRUE TUBE TUFT TURN TUSK TWIN TYPE UGLY UNDO UNIT UPON URGE USED VANE VASE VAST VEER VEIL VERB VEST VETO VINE VOLE VOLT VOTE WADE WAGE WAKE WALK WARD WARM WARN WARP WART WARY WASH WASP WEAK WEAR WICK WIDE WILD WILL WILT WINE WING WINK WISP WISH WORE WORN WRAP WREN YARN YELL ZEAL ZONE ZOOM ADULT ALBUM ANGEL APPLE APRON AWARD AWFUL BASIC BEACH BEAST BENCH BIRCH BIRTH BLAME BLAND BLANK BLAST BLEND BLESS BLISS BLOOD BLOWN BOARD BRAID BRAIN BRASH BRAWN BREED BRICK BRIDE BRIEF BRINE BRING BRISK BROOD BROTH BRUSH BRUTE BUDGE BULLY BUNCH BURST BUTCH CABIN CAMEL CANDY CARVE CAUSE CEDAR CHAIN CHAIR CHALK CHEAP CHECK CHEEK CHEER CHESS CHEST CHILD CHILL CHORD CIDER CLAIM CLAMP CLANK CLERK CLIMB CLING CLINK CLOSE CLOTH CLOUD CLOWN CLUCK CLUMP COMET COMIC CORAL COUCH COUNT COVER CRACK CRAMP CRANE CREAK CREAM CREEK CREEP CREST CRIME CRISP CROSS CROWD CROWN CRUST CUBIC CURLY CURVE DADDY DAILY DAIRY DANCE DEATH DEBUT DECOY DELAY DENSE DEPOT DEVIL DITCH DODGE DOUBT DOUSE DRAFT DRAIN DRAPE DRAMA DRAWL DREAD DREAM DRESS DRIFT DRINK DROVE DRUNK DRYER DWARF DWELL EAGLE EARLY EARTH ELDER ELITE EVADE EXACT EXIST EXPEL EXTRA FABLE FACET FANCY FARCE FAITH FEAST FERRY FERAL FETCH FEVER FIEND FIERY FIGHT FINCH FLAIR FLARE FLASH FLASK FLECK FLEET FLOCK FLOOR FLOUR FLUTE FOGGY FOLLY FORAY FORGE FOUND FRAME FRANK FRAUD FRESH FROZE FUDGE FUNKY FUNNY FUZZY GHOST GIDDY GLAND GLARE GLEAM GLIDE GLOAT GLOOM GLOSS GLOVE GNOME GOLEM GRAFT GRAIL GRANT GRASP GRAZE GREED GREET GRIEF GRILL GRIPE GROAN GROPE GROVE GROWL GRUNT GUISE GULLY GUMMY GUSTO GUTSY GYPSY HABIT HAIRY HANDY HAPPY HARSH HATCH HAVEN HEAVY HEDGE HERON HIPPO HITCH HOBBY HONEY HONOR HORDE HOVER HUMAN HUSKY HUTCH IDEAL IGLOO IMAGE INFER INGOT IRATE ITCHY IVORY JAZZY JUDGE JUICE JUICY JUMBO JUMPY KNIFE KNEEL LABEL LANCE LARGE LASER LAUGH LAYER LEMON LEVEL LIGHT LIMIT LINER LINGO LITHE LIVER LOCAL LOTUS LOUSY LOWLY LOYAL LUCID LUCKY LUMPY LUSTY MAGIC MAJOR MAKER MANOR MAPLE MARSH MAUVE MEDAL MERRY MESSY MINCE MOCHA MOODY MORAL MOUND MOUSE MUDDY MUGGY MUSKY MUSTY NASTY NERVE NIFTY NIGHT NOISY NOTCH NOVEL OAFISH OFTEN ORDER OTTER OUTER PANSY PARTY PASTA PATCH PAUSE PETTY PHONE PHOTO PIXEL PLACE PLAIN PLANE PLANT PLATE PLEAD PLEAT PLUCK PLUMB PLUME PLUMP PLUNK PLUSH POINT PORCH PREEN PRESS PRICE PRIDE PRIME PRIMP PRISM PROBE PRONE PROOF PROSE PROUD PROWL PSALM PULSE PUNCH PUPIL PUSHY QUAIL QUASH QUALM QUART QUERY QUEST QUEEN QUELL QUEUE QUICK QUIET QUILL QUIRK QUILT RAINY RALLY RAPID RASPY RATTY REACH REALM REGAL REIGN RELAX REPAY RETRO REVEL RINSE RISKY RIVAL RIVET ROBIN ROCKY RODEO ROMAN ROOMY ROUGE ROUGH RUGBY RULER RUNNY RURAL RUSTY SADLY SALTY SANDY SAUCE SAUCY SAVVY SCALD SCALP SCARY SCENE SCONE SCOOP SCORE SCORN SCOUR SCOUT SCOWL SCRAM SCRAP SCRUB SEEDY SENSE SERVE SHADY SHAKE SHAKY SHALE SHAME SHAPE SHARE SHARP SHAWL SHELF SHELL SHIFT SHIRT SHOCK SHOOK SHORE SHOUT SHOVE SHRUB SHRUG SHUCK SKIMP SKULL SLAIN SLANG SLANT SLASH SLATE SLAVE SLEEK SLEET SLEPT SLIDE SLINK SLOPE SLOSH SLOTH SLUMP SLURP SMALL SMEAR SMELL SMILE SMITE SNACK SNARE SNEAK SNIFF SNORE SNORT SNOUT SNOWY SOGGY SOLAR SORRY SPEAK SPEAR SPECK SPEED SPELL SPEND SPICY SPILL SPINE SPOIL SPOKE SPOOK SPOON SPORE SPOUT SPRAY SPRIG SQUAT SQUID STAFF STAIN STAIR STALK STALL STAMP STARE STARK STEAM STEEL STEER STERN STIFF STILL STING STINK STOIC STOKE STONE STORY STOUT STRUT STYLE SUNNY SUPER SURGE SURLY SWEET SWEPT SWIFT TACKY TAFFY TALON TANGY TARDY TASTY TAUNT TAWNY TEPID TERSE THICK THIEF THIGH THORN THREW THROB THROW THUMP TIMID TIPSY TITAN TOAST TORSO TOUGH TOWEL TOXIC TRACK TRADE TRAIL TRAIT TRAMP TRASH TRITE TROLL TROVE TRUCE TRUMP TRULY TUBBY TULIP TUMOR TUNIC TUTOR TWEAK TWEED TWERP TWILL TWIRL TYING UDDER UNFIT UPPER UPSET USHER UTTER VAGUE VALID VALOR VAPOR VAUNT VEINY VENOM VIVID VOCAL VODKA VITAL VIPER WAFER WAGER WALTZ WEARY WEIRD WHACK WHIFF WHINE WHOLE WIDEN WIMPY WINDY WITCH WITTY WOOZY WORDY WORLD WORSE WORTH WRING WRONG YEARN YUCKY ZESTY ZINGY ZIPPY ZOMBIE`.trim().split(/\s+/);
+
+const MEDIUM = `ABSENT ACROSS ACTION ACTUAL ADJUST ADMIRE ADVICE AFFORD AFRAID AGENCY AGREED ALMOST AMOUNT ANIMAL ANSWER ANYONE APPEAL APPEAR AROUND ASKING ASLEEP ATTACK ATTEND AUTHOR AVENUE AWAKEN BABIES BARELY BATTLE BEAUTY BECOME BEFORE BEHIND BELIEF BELONG BESIDE BETTER BEYOND BITTER BOTHER BOTTLE BOUGHT BRANCH BRIGHT BROKEN BUDGET BUNDLE BUTLER BUTTON CAMERA CANDLE CANNOT CARPET CASTLE CAUGHT CENTER CHANGE CHARGE CHOICE CHOOSE CHROME CIRCLE CIRCUS CLEVER COFFEE COLUMN COMBAT COMING COMMIT CORNER COTTON COUNTY COURSE COVERS CRATER CRUISE CRYING CUSTOM DANGER DECIDE DEFEND DESERT DESIGN DESIRE DETAIL DEVICE DIFFER DINNER DIRECT DIVIDE DOLLAR DOUBLE DRIVEN DURING EASILY EFFECT EFFORT EITHER EMPIRE ENABLE ENDING ENOUGH ENSURE ENTIRE ESCAPE ESTATE EXCEPT EXPECT EXPAND EXPORT EXTEND FACTOR FALLEN FAMILY FASTER FATHER FIGURE FINGER FINISH FLIGHT FOLLOW FOREST FORGET FORMAL FORMER FOUGHT FOURTH FROZEN FUTURE GALAXY GARDEN GATHER GENTLE GIFTED GLOBAL GOLDEN GOTTEN GROUND GROWTH GUIDED HAPPEN HARDLY HAVING HEALTH HEAVEN HIDDEN HIGHER HIGHLY HOLDER HORROR HUNTER IMPACT INDEED INJURY INSIDE INSIST ISLAND ITSELF JOINED JUNGLE JUNIOR KEEPER KILLED KNIGHT LAUNCH LAWYER LEADER LEANER LESSON LETTER LIQUID LISTEN LOCKET LITTLE LONGER LOOKED LOSING LOVELY LOWEST MANNER MARGIN MARKET MASTER MATTER MEDIUM MENTAL MENTOR METHOD MIDDLE MIGHTY MIRROR MODERN MODULE MOMENT MOTHER MOTION MOVING MUSCLE MUTUAL NARROW NATION NATURE NEARBY NEEDED NESTED NORMAL NOTICE NUMBER OBJECT OFFSET ONLINE OPENER OPTION ORANGE ORIGIN OTHERS OUTPUT OUTFIT OWNERS OXYGEN PALACE PARDON PARENT PATROL PERIOD PHRASE PIRATE PLANET PLASMA PLAYER PLENTY POLICE POLICY PORTAL POWDER POWERS PRETTY PRINCE PRISON PROFIT PROPER PROVEN PURPLE PUZZLE RAGGED RANDOM RANGER RARELY RATHER REALLY REASON RECORD REMOTE RENDER REPAIR REPEAT RESIST RETURN REVEAL RISING ROCKET RUBBER RULING RUNNER SADDLE SAMPLE SAVAGE SCREEN SECTOR SENTRY SERIES SERVER SETTLE SHADOW SHIELD SIGNAL SILVER SIMPLE SINGLE SISTER SKILLS SLIGHT SLOWLY SMILED SNIPER SOCKET SPIRIT SPOKEN SPRING STABLE STEADY STRAIN STREET STRICT STRONG STRUCK SUBTLE SUDDEN SUFFER SUMMER SUPPLY SURELY SYMBOL SYSTEM TALENT TANGLE TARGET TENDER TERROR THEORY THINGS THORNY THOUGH THREAD THREAT TIMBER TONGUE TOWARD TRAVEL TREATY TRIPLE TRYING TURKEY TWELVE TWENTY UNFAIR UNFOLD UNIQUE UNITED UNLESS UNLOCK UNUSED UPBEAT USEFUL VALLEY VICTIM VISION VISUAL VOICES VOLUME WANTED WARMTH WEALTH WINDOW WINTER WITHIN WONDER WORKED WOUNDS WRITING ABILITY ABSENCE ACCOUNT ACHIEVE ACQUIRE AMAZING ANIMATE ANOTHER ANYBODY ARRANGE ATTEMPT BALANCE BECAUSE BELIEVE BETWEEN CAPABLE CAPTURE CERTAIN COMPANY COMPARE CONNECT CONTAIN CONTROL CORRECT COSTUME COUNTRY CULTURE CURIOUS CURRENT DECLARE DEFENSE DELIVER DESPITE DEVELOP DISCUSS DISPLAY DISTANT DISTURB DIVERSE EDUCATE ELEMENT EQUALLY EXAMINE EXAMPLE EXPLORE EXPOSED FASHION FIGHTER FORWARD FREEDOM GENERAL GRATIFY GRAVITY GUARDED HARVEST HISTORY HUSBAND IMAGINE IMPROVE INCLUDE INSTEAD INVITED KNOWING LEATHER LIBERTY LOOKING MEANING MISTAKE MORNING MYSTERY NEUTRAL NOTHING OUTSIDE PATIENT PATTERN PERFORM PICTURE POPULAR PRESENT PREVENT PROFILE PROPOSE PROTECT PROVIDE QUICKLY QUALIFY REALITY REBUILD RECEIVE REQUIRE RUNNING SATISFY SECONDS SERIOUS SHELTER SHOWING SOCIETY STUDENT SUCCEED SURFACE SURVIVE TEACHER THEATER THROUGH TROUBLE TYPICAL UNUSUAL USUALLY VICTORY VIOLENT WELCOME WESTERN WHETHER WHISPER WILLING WITHOUT WORKING AWESOME BARRIER CAREFUL CHAPTER CLASSIC COMPLEX CONFIRM DEALING DECIDED DETAILS EFFECTS EFFORTS FEELING GAINING GETTING GODDESS HELPING HOLDING MEETING OUTCOME QUICKLY READING SIMILAR SOLVING SPECIAL TALKING TESTING USUALLY WELCOME ADVANCE ANCIENT BALANCE CABINET CAPTAIN CAPTAIN CHANNEL CHAPTER CHARTER CITIZEN CLIMATE COLLECT COMBINE COMFORT COMMAND COMMENT COMPACT COMPETE CONTENT CONTEST CONVERT COUNCIL COUNTER COURAGE CREATED CRICKET CRYSTAL CULTURE CUISINE CURTAIN CUSHION CUTTING CYCLIST DECIMAL DEFENSE DOLPHIN DRESSER EMPEROR EXCITED EXPRESS FACTORY FAILURE FALLING FANTASY FASHION FATIGUE FEATHER FICTION FITTING FLANNEL FLAVOUR FLOWING FOLIAGE FORGIVE FORTUNE FREEWAY FURNACE GRIZZLY GROCERY HARVEST HIGHWAY HISTORY HOSTILE HUNTING HUSBAND ILLNESS INSPIRE INSTANT INSTEAD INTENSE INVOLVE KNIGHTS KITCHEN KNOWING LANDING LASHING LASTING LEADING LEAVING LIFTING LOADING LOCATOR LOCKING MAGICAL MANAGED MEANING MEDICAL MENTION MINERAL MIRACLE MISSING MIXTURE MONSTER MONTHLY MORNING MYSTERY NUCLEAR OBSERVE OFFENSE OFFICER OPINION OPTICAL OUTCOME OUTSIDE OVERLAP PACKAGE PASSAGE PERCENT PERFECT PERFORM PERSIST PICKING PLASTIC POPULAR PORTION POSSESS POSTING PREVENT PROCESS PRODUCE PRODUCT PROGRAM PROTECT PROTEST PURPOSE QUALITY QUARTER QUICKLY RAMPAGE REALITY REFRESH REFUSAL REGULAR RELEASE RELIANT REMOVAL RESOLVE RESPECT RESPOND RESTORE RESULTS RETREAT REVENUE REVISED SILICON SILENCE SINGING SKATING SLIDING SMOKING SOCIETY SOLEMN SOLVING SORTING SPINACH STATION STRINGS SUBJECT SURFACE SUPPORT SUPPOSE SURGERY SURPASS SUSPEND TALKING TANTRUM TASTING TEXTURE THERAPY THERMAL THICKET THUNDER TOWARDS TRADING TRAINER TRANSIT TRIUMPH TURMOIL UNCOVER UNDERGO UNIFIED UNKNOWN UPDATED UPGRADE VIOLENT VOLTAGE WARRANT WEATHER WILLING WITHERS WORDING`.trim().split(/\s+/);
+
+const HARD = `ABANDONED ABILITIES ABSOLVING ABUNDANCE ACADEMICS ACCEPTING ACCESSING ACHIEVING ACQUAINTANCE ACTIVATED ADDICTION ADMIRABLE ADVANCING ADVENTURE AFFECTING AFFIRMING AFTERMATH AGONIZING ALIGNMENT ALLEGIANCE ALLOCATED ALTERNATING AMBIGUOUS AMBITIOUS AMPLIFIED ANALYZING ANARCHIST ANIMOSITY ANNOTATED APPEARING APPETIZER APPOINTED ARCHITECT ASSERTION ASSISTING AUTHENTIC AWAKENING BACKSTROKE BALANCING BANDWIDTH BECKONING BENCHMARK BIOGRAPHY BLACKSMITH BLOSSOMING BOUNDARIES BRILLIANT CAPTIVATE CATALOGUE CELESTIAL CHALLENGE CHARACTER CHRONICLE CIVILIZED COALITION COGNIZANT COMMANDED COMMODITY COMMUNAL COMMUNITY COMPARING COMPETING COMPLETED COMPLEXION CONCEALED CONCLUDED CONFUSING CONNECTED CONSCIOUS CONSTRUCT CONSULTED COUNTLESS COURAGEOUSLY CRAFTSMAN CREDITING CROWDFUND CULTIVATE DEDICATED DEFEATING DEFENSIVE DEMOCRACY DEPARTURE DEPENDABLE DEPICTION DESERVING DETECTIVE DEVOUTLY DIAGNOSIS DIRECTION DISCOVERY DISHONEST DISPLAYED DISSOLVE DOWNGRADE ELABORATE ELIMINATE ELSEWHERE EMERGENCE EMOTIONAL EMULATING ENCOUNTER ENDURANCE ENERGIZED ENJOYABLE ESCALATED ESTABLISH ESTIMATING EVAPORATE EVOLUTION EXAMINERS EXCAVATION EXCELLENCE EXECUTION EXHAUSTED EXHIBITED EXPANSION EXPEDITION EXPLOSIVE EXPRESSIVE EXTENDED EXTREMITY FASHIONABLE FASTENING FICTIONAL FIERCENESS FIGURATIVE FILTERING FLATTERING FOLLOWING FORMULATE FORSAKING FRANCHISE GENERATED GLADIATOR GLOBALIZE GOVERNING GRADUALLY GUARANTEE GUIDELINE HAPPENING HARDCOVER HARVESTED HIERARCHY HISTORIAN HOROSCOPE HURRICANE HYPNOTIC IDENTICAL IMMORTALITY IMPLEMENT IMPORTANT INAUGURAL INCREDIBLE INDICATION INFLUENCE INHERITED INITIALLY INITIATED INNOCENCE INSPIRING INTEGRATE INTEGRITY INTELLECT INTENSELY INTRICATE INTUITION INVASIONS ISOLATING LABYRINTH LANDSCAPE LIBERATING LISTENING LITERALLY LOCATIONS LOGISTICS MAGNITUDE MAJESTICALLY MASTERPIECE MEASURING MECHANISM MELANCHOLY MEMORABLE MIGRATION MILESTONE MINIMALIST MONASTERIES MONITORING MOTIVATING MYSTERIOUS NARRATING NAVIGATOR NECESSARY NEGOTIATE NIGHTFALL NOSTALGIA OBJECTIVE OBLIGATED OBSCURING OBSTACLES OCCASIONAL OCCURRING OFFENSIVE OMISSIONS ONLOOKING OPERATING OPPOSITION OPTIMISTIC OUTSKIRTS OVERFLOWING OVERCOMING PARAMOUNT PASSIONATE PEDESTRIAN PERIMETER PERSISTENT PHYSICIAN PIONEERING PORTRAYING PREDICTING PREFERENCE PREVIOUSLY PRINCIPLE PRODUCING PROSPEROUS PROTESTING QUALIFYING RADIATION REACHABLE REALISTIC REASONING REBUILDING RECIPIENT RECORDING REDEFINING REFLECTING REINFORCED RELENTLESS REMAINING REMEMBERED RENDERING REPORTING RESIDENTS RESOLVING RESPECTING RESTORING RETRACING REVEALING RIGOROUS SACRIFICED SCHOLASTIC SCIENTIFIC SCATTERING SEAMLESSLY SEPARATING SHELTERING SIGNATURE SIMULATING SKILLFULLY SOVEREIGN SPACESHIP STATIONED STEADFAST STIMULATED STRENUOUS SUBLIMELY SUPREMACY SURPASSING SURVIVING SYMBOLIZE TANTALIZING TEACHINGS TECHNIQUE TEMPORARY THEORIZED THOROUGHLY TIMBERLAND TOLERANCE TRADITION TRAVELING TREATMENT TREMBLING TURBULENCE TYRANNICAL UNCERTAIN UNDERTAKE UNHELPFUL UNIVERSALLY UNORTHODOX UNSTOPPABLE UPHEAVAL VALIDATED VANISHING VEGETATION VIBRATING VISIONARILY VOLUNTARY WANDERING WATCHFULLY WAVELENGTH WELCOMING WHIRLPOOL WONDROUS WORLDWIDE ABANDONED ACCURACY ACROBATICS ADJUSTABLE ADMIRATION AFTERTHOUGHT ALGORITHM ALLEGATION ALTERNATIVE APPEARANCE APPLICABLE APPRECIATE ATMOSPHERE ATTACHMENT ATTRIBUTED BARGAINING BATTLEGROUND BELONGING BEWITCHING BREATHTAKING BRIGHTNESS CALCULATED CAPABILITY CAPTIVATING CIRCULATED CLARIFYING CLASSIFIED CLOUDINESS COINCIDENCE COLORFULLY COMPASSION COMPULSION CONCEIVING CONDUCTIVE CONSIDERED CONSPIRACY CONSUMING CONTINUOUS CONVICTION CORRELATE COUNSELING CREATIVITY CRITICALLY CROSSROADS CURIOSITY DANGEROUS DAYDREAMING DECISIVELY DECORATING DEFENDING DELIGHTFUL DERIVATIVE DESCRIBING DEVASTATED DEVISING DILEMMA DIMENSION DISCLOSING DISCOVERED DISLOYALTY DOMINATED DOMINANCE DOUBTFUL DOWNSTAIRS EFFECTIVELY ELECTRIFY ENDEAVORED ENRICHMENT ENTHUSIASM EVALUATION EVENTUALLY EXEMPLARY EXHAUSTION EXTENSIVELY FABRICATED FACILITATED FELLOWSHIP FLEXIBILITY FLUCTUATING FORMIDABLE FOUNDATION FREQUENCY GENEROSITY GEOLOGICAL HARSHNESS HEARTFELT HESITATION HONOURABLE HYPOTHESIS IMMOVABLE IMPAIRMENT INDICATION INEQUALITY INFRACTION INSPIRATIONAL INTRIGUING INVINCIBLE LEGENDARY LIBERATION LIMITATION LOCOMOTIVE LONGEVITY MANIFESTLY MANIPULATE MARKETING MATHEMATICS MATURATION MEANINGFUL MECHANICAL MEDITATION MISLEADING NAVIGATION NEGOTIATED NIGHTSHIFT NOURISHING OPPOSITION ORGANIZED OUTSTANDING OVERJOYED OVERTHROWN PARTNERSHIP PASSIONATE PERFECTION PERSISTENT PLENTIFUL PORTRAYING POSSESSION PREDICTING PRODUCTIVE PROMINENT PROTECTING QUALIFIED REFLECTING REMARKABLE RESEARCHER RESILIENCE RESONATING REVOLUTION SACRIFICED SANCTUARY SATISFYING SCIENTIFIC SEAMLESSLY SEQUENTIAL SIMPLICITY SOLIDARITY SPECTACULAR SPLENDOUR STAUNCHLY STEADINESS STIMULATION STREAMLINED STRUGGLING THUNDEROUS TOLERANCE TRANSFORM TRAVELING UNBREAKABLE UNCONDITIONAL UNEXPLAINED UNIFORMITY UNLIMITED UNRELIABLE UPLIFTING VALIDATION VERSATILE VICTORIOUS VISUALIZE VIBRANTLY WATCHFULLY WILDERNESS WONDERFUL WORSHIPPED`.trim().split(/\s+/);
+
+const WORDS = [...EASY, ...MEDIUM, ...HARD];
+
+// ── Background stars ──────────────────────────────────────────────────────────
+const bgC = document.getElementById('bgCanvas');
+const bgX = bgC.getContext('2d');
+function resizeBg() { bgC.width = window.innerWidth; bgC.height = window.innerHeight; }
+resizeBg(); window.addEventListener('resize', resizeBg);
+const STARS = Array.from({length:160},()=>({x:Math.random(),y:Math.random(),s:Math.random()*1.3+.3,a:Math.random()*.7+.2,tt:Math.random()*Math.PI*2,tw:Math.random()*.03+.006}));
+(function starLoop(){
+  bgX.fillStyle='#04000c'; bgX.fillRect(0,0,bgC.width,bgC.height);
+  for(const s of STARS){s.tt+=s.tw; const a=s.a*(0.6+0.4*Math.sin(s.tt)); bgX.beginPath(); bgX.arc(s.x*bgC.width,s.y*bgC.height,s.s,0,Math.PI*2); bgX.fillStyle=`rgba(255,255,255,${a})`; bgX.fill();}
+  requestAnimationFrame(starLoop);
+})();
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let S = {
+  mode: null, word: '', guessed: new Set(), wrongCount: 0,
+  wins: 0, losses: 0, difficulty: 'easy',
+  phase: 'menu',
+};
+let pending2PWord = '';
+
+// ── Screen management ─────────────────────────────────────────────────────────
+function showOnly(id) {
+  ['menuScreen','wordEntryScreen','handoffScreen','gameScreen','resultScreen']
+    .forEach(s => document.getElementById(s).classList.toggle('hidden', s !== id));
+}
+function goMenu() {
+  clearTimers();
+  S.phase = 'menu';
+  document.getElementById('modeBadge').textContent = 'SELECT A MODE';
+  showOnly('menuScreen');
+}
+function clearTimers() {}
+
+// ── Mode selection ────────────────────────────────────────────────────────────
+function selectMode(mode) {
+  S.mode = mode;
+  const badges = {'1p':'P VS AI','2p':'TWO PLAYERS'};
+  document.getElementById('modeBadge').textContent = badges[mode];
+  if (mode === '2p') {
+    document.getElementById('wordInput').value = '';
+    document.getElementById('wordError').innerHTML = '&nbsp;';
+    showOnly('wordEntryScreen');
+    setTimeout(() => document.getElementById('wordInput').focus(), 100);
+  } else {
+    startGame(randomWord());
+  }
+}
+function randomWord() {
+  const pool = S.difficulty === 'easy' ? EASY : S.difficulty === 'medium' ? MEDIUM : HARD;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+function setDifficulty(diff, btn) {
+  S.difficulty = diff;
+  document.querySelectorAll('.diff-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+
+// ── 2P Word entry ─────────────────────────────────────────────────────────────
+function confirmWord() {
+  const w = document.getElementById('wordInput').value.trim().toUpperCase();
+  const err = document.getElementById('wordError');
+  if (w.length < 3)  { err.textContent = 'WORD TOO SHORT (MIN 3 LETTERS)'; return; }
+  if (!/^[A-Z ]+$/.test(w)) { err.textContent = 'LETTERS ONLY PLEASE'; return; }
+  err.innerHTML = '&nbsp;';
+  pending2PWord = w;
+  showOnly('handoffScreen');
+}
+function startGameFromHandoff() { startGame(pending2PWord); }
+
+// ── Start game ────────────────────────────────────────────────────────────────
+function startGame(word) {
+  clearTimers();
+  S.word       = word.toUpperCase();
+  S.guessed    = new Set();
+  S.wrongCount = 0;
+  S.phase      = 'game';
+  buildLetterGrid();
+  renderWord();
+  renderWrong();
+  renderPips();
+  drawHangman(0);
+  showOnly('gameScreen');
+}
+function newGame() {
+  clearTimers();
+  if (S.mode === '2p') {
+    document.getElementById('wordInput').value = '';
+    document.getElementById('wordError').innerHTML = '&nbsp;';
+    showOnly('wordEntryScreen');
+    setTimeout(() => document.getElementById('wordInput').focus(), 100);
+  } else {
+    startGame(randomWord());
+  }
+}
+
+// ── Guess logic ───────────────────────────────────────────────────────────────
+function guess(letter) {
+  letter = letter.toUpperCase();
+  if (S.phase !== 'game' || S.guessed.has(letter)) return;
+  S.guessed.add(letter);
+  if (!S.word.includes(letter)) S.wrongCount++;
+  drawHangman(S.wrongCount);
+  renderWord();
+  renderWrong();
+  renderPips();
+  updateLetterBtn(letter, S.word.includes(letter));
+
+  const won  = S.word.split('').filter(c => c !== ' ').every(c => S.guessed.has(c));
+  const lost = S.wrongCount >= 6;
+  if (won || lost) {
+    S.phase = 'result';
+    if (won) S.wins++; else S.losses++;
+    document.getElementById('winsEl').textContent = S.wins;
+    document.getElementById('lossEl').textContent = S.losses;
+    showResult(won);
+  }
+}
+
+function showResult(won) {
+  const title = document.getElementById('resultTitle');
+  title.textContent = won ? 'YOU WIN!' : 'GAME OVER';
+  title.style.color = won ? '#00ff88' : '#ff2d78';
+  title.style.textShadow = won ? '0 0 20px #00ff88' : '0 0 20px #ff2d78';
+  if (!won) {
+    document.querySelectorAll('.slot').forEach((el, i) => {
+      const ch = S.word[i];
+      if (ch && ch !== ' ' && !S.guessed.has(ch)) el.classList.add('shown');
+    });
+  }
+  document.getElementById('resultWord').textContent = S.word;
+  showOnly('resultScreen');
+}
+
+
+// ── Hangman drawing ───────────────────────────────────────────────────────────
+function drawHangman(n) {
+  const cv = document.getElementById('hangCanvas');
+  const cx = cv.getContext('2d');
+  cx.clearRect(0,0,220,290);
+  cx.fillStyle = '#00000a'; cx.fillRect(0,0,220,290);
+  cx.lineCap = 'round'; cx.lineJoin = 'round';
+
+  // Gallows — cyan
+  cx.strokeStyle='#00ffff'; cx.lineWidth=3; cx.shadowColor='#00ffff'; cx.shadowBlur=7;
+  cx.beginPath(); cx.moveTo(10,278); cx.lineTo(210,278); cx.stroke();   // base
+  cx.beginPath(); cx.moveTo(52,278); cx.lineTo(52,15);   cx.stroke();   // pole
+  cx.beginPath(); cx.moveTo(52,15);  cx.lineTo(165,15);  cx.stroke();   // beam
+  cx.beginPath(); cx.moveTo(165,15); cx.lineTo(165,50);  cx.stroke();   // rope
+  cx.shadowBlur=0;
+  if (n === 0) return;
+
+  const dead = n >= 6;
+  const col  = dead ? '#ff2200' : '#ff2d78';
+  cx.strokeStyle=col; cx.fillStyle=col; cx.shadowColor=col; cx.shadowBlur=10; cx.lineWidth=2.5;
+
+  // 1 — Head
+  cx.beginPath(); cx.arc(165,68,19,0,Math.PI*2); cx.stroke();
+  // Face
+  if (dead) {
+    cx.lineWidth=2;
+    // X left eye
+    cx.beginPath(); cx.moveTo(156,61); cx.lineTo(161,66); cx.stroke();
+    cx.beginPath(); cx.moveTo(161,61); cx.lineTo(156,66); cx.stroke();
+    // X right eye
+    cx.beginPath(); cx.moveTo(169,61); cx.lineTo(174,66); cx.stroke();
+    cx.beginPath(); cx.moveTo(174,61); cx.lineTo(169,66); cx.stroke();
+    // Frown
+    cx.beginPath(); cx.arc(165,78,6,0,Math.PI); cx.stroke();
+  } else {
+    cx.lineWidth=1.5;
+    cx.beginPath(); cx.arc(159,64,2.5,0,Math.PI*2); cx.fill();
+    cx.beginPath(); cx.arc(171,64,2.5,0,Math.PI*2); cx.fill();
+    cx.beginPath(); cx.arc(165,72,5,0,Math.PI); cx.stroke();
+  }
+  cx.lineWidth=2.5;
+  if (n<2) return;
+
+  // 2 — Body
+  cx.beginPath(); cx.moveTo(165,87); cx.lineTo(165,155); cx.stroke();
+  if (n<3) return;
+
+  // 3 — Left arm
+  cx.beginPath(); cx.moveTo(165,108); cx.lineTo(132,140); cx.stroke();
+  if (n<4) return;
+
+  // 4 — Right arm
+  cx.beginPath(); cx.moveTo(165,108); cx.lineTo(198,140); cx.stroke();
+  if (n<5) return;
+
+  // 5 — Left leg
+  cx.beginPath(); cx.moveTo(165,155); cx.lineTo(133,200); cx.stroke();
+  if (n<6) return;
+
+  // 6 — Right leg
+  cx.beginPath(); cx.moveTo(165,155); cx.lineTo(197,200); cx.stroke();
+  cx.shadowBlur=0;
+}
+
+// ── Render helpers ────────────────────────────────────────────────────────────
+function renderWord() {
+  const el = document.getElementById('wordDisplay');
+  el.innerHTML = '';
+  for (const ch of S.word) {
+    const div = document.createElement('div');
+    if (ch === ' ') {
+      div.className = 'slot space';
+    } else {
+      div.className = 'slot' + (S.guessed.has(ch) ? ' hit' : '');
+      if (S.guessed.has(ch)) div.textContent = ch;
+    }
+    el.appendChild(div);
+  }
+}
+
+function renderWrong() {
+  const wrong = [...S.guessed].filter(l => !S.word.includes(l));
+  document.getElementById('wrongTitle').textContent =
+    `WRONG  ${S.wrongCount} / 6`;
+  document.getElementById('wrongDisplay').innerHTML =
+    wrong.map(l => `<span class="wletter">${l}</span>`).join('');
+}
+
+function renderPips() {
+  const el = document.getElementById('guessPips');
+  el.innerHTML = '';
+  for (let i = 0; i < 6; i++) {
+    const d = document.createElement('div');
+    const remaining = 6 - S.wrongCount;
+    d.className = 'guess-pip' +
+      (i >= remaining ? ' used' : '') +
+      (remaining <= 2 && i < remaining ? ' danger' : '');
+    el.appendChild(d);
+  }
+}
+
+function buildLetterGrid() {
+  const grid = document.getElementById('letterGrid');
+  grid.innerHTML = '';
+  const row1 = 'ABCDEFGHIJKLM', row2 = 'NOPQRSTUVWXYZ';
+  [row1, row2].forEach(letters => {
+    const row = document.createElement('div');
+    row.className = 'lrow';
+    for (const l of letters) {
+      const btn = document.createElement('button');
+      btn.className = 'lbtn';
+      btn.textContent = l;
+      btn.id = `btn-${l}`;
+      btn.onclick = () => guess(l);
+      row.appendChild(btn);
+    }
+    grid.appendChild(row);
+  });
+}
+
+function updateLetterBtn(letter, correct) {
+  const btn = document.getElementById(`btn-${letter}`);
+  if (btn) { btn.classList.add(correct ? 'hit' : 'miss'); btn.disabled = true; }
+}
+
+
+// ── Keyboard input ────────────────────────────────────────────────────────────
+window.addEventListener('keydown', e => {
+  if (S.phase !== 'game') return;
+  if (/^[a-zA-Z]$/.test(e.key)) guess(e.key.toUpperCase());
+});
+</script>
+</body>
+</html>
