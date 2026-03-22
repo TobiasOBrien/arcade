@@ -614,6 +614,7 @@ function updateHUD() {
 // ════════════════════════════════════════════════════════════
 const KEYS = {};
 document.addEventListener('keydown', e => {
+  if (document.activeElement === document.getElementById('nameInput')) return;
   if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','w','a','s','d',
        'W','A','S','D'].includes(e.key)) {
     e.preventDefault();
