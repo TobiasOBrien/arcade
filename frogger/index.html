@@ -1,0 +1,1281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Frogger — Retro Arcade</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #04000c;
+      font-family: 'Courier New', monospace;
+      color: #fff;
+      min-height: 100vh;
+      display: flex; justify-content: center; align-items: flex-start;
+      overflow-x: hidden;
+    }
+    body::after {
+      content: '';
+      position: fixed; inset: 0;
+      background: repeating-linear-gradient(transparent, transparent 3px, rgba(0,0,0,.12) 3px, rgba(0,0,0,.12) 4px);
+      pointer-events: none; z-index: 999;
+    }
+    #bgCanvas { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+
+    #app {
+      position: relative; z-index: 1;
+      width: 100%; max-width: 960px;
+      padding: 20px 20px 40px;
+      display: flex; flex-direction: column; align-items: center;
+    }
+
+    /* ── Top bar ── */
+    .top-bar {
+      width: 100%; display: flex;
+      justify-content: space-between; align-items: center;
+      margin-bottom: 6px;
+    }
+    .home-btn {
+      font-family: 'Courier New', monospace;
+      font-size: 11px; color: #444; background: transparent;
+      border: 1px solid #333; padding: 5px 12px; cursor: pointer;
+      letter-spacing: 1px; text-decoration: none;
+      transition: color .15s, border-color .15s; display: inline-block;
+    }
+    .home-btn:hover { color: #aaa; border-color: #aaa; }
+
+    /* ── Title ── */
+    .game-title {
+      font-size: clamp(24px, 4.5vw, 44px);
+      letter-spacing: 6px; text-align: center;
+      color: #ffe600;
+      text-shadow: 3px 3px 0 #ff2d78, 6px 6px 0 #cc0055, 9px 9px 0 rgba(180,0,60,.3);
+      margin: 8px 0 24px;
+    }
+
+    .screen { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 16px; }
+
+    /* ── MENU ── */
+    .menu-section-label { font-size: 9px; color: #444; letter-spacing: 4px; margin-bottom: 8px; text-align: center; }
+    .diff-btns { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+    .diff-btn {
+      padding: 10px 28px; font-family: 'Courier New', monospace;
+      font-size: 12px; letter-spacing: 3px; cursor: pointer;
+      background: #080808; border: 2px solid #333; color: #555;
+      transition: all .15s;
+    }
+    .diff-btn:hover { border-color: #ffe600; color: #ffe600; }
+    .diff-btn.easy.active  { background: #001a00; border-color: #00ff88; color: #00ff88; box-shadow: 0 0 14px #00ff8844; }
+    .diff-btn.medium.active{ background: #1a0e00; border-color: #ffaa00; color: #ffaa00; box-shadow: 0 0 14px #ffaa0044; }
+    .diff-btn.hard.active  { background: #1a0008; border-color: #ff2d78; color: #ff2d78; box-shadow: 0 0 14px #ff2d7844; }
+
+    .diff-info { font-size: 9px; color: #333; letter-spacing: 1.5px; text-align: center; min-height: 14px; }
+
+    .start-btn {
+      padding: 14px 48px; font-family: 'Courier New', monospace;
+      font-size: 15px; letter-spacing: 4px; cursor: pointer;
+      background: transparent; border: 2px solid #ffe600; color: #ffe600;
+      transition: all .15s;
+    }
+    .start-btn:hover { background: #ffe60018; box-shadow: 0 0 20px #ffe60055; }
+
+    .menu-divider { width: 100%; border: none; border-top: 1px solid #1a1a1a; max-width: 560px; }
+
+    /* ── Leaderboard ── */
+    .lb-wrap { width: 100%; max-width: 560px; }
+    .lb-title { font-size: 9px; letter-spacing: 4px; color: #444; text-align: center; margin-bottom: 10px; }
+    .lb-table { width: 100%; border-collapse: collapse; font-size: 11px; letter-spacing: 1.5px; }
+    .lb-table th { font-size: 8px; color: #333; letter-spacing: 3px; padding: 4px 8px; border-bottom: 1px solid #1a1a1a; text-align: left; }
+    .lb-table th.r { text-align: right; }
+    .lb-table td { padding: 5px 8px; color: #445; border-bottom: 1px solid #0d0d0d; }
+    .lb-table td.rank { color: #333; font-size: 9px; }
+    .lb-table td.name { color: #6a7090; }
+    .lb-table td.score { text-align: right; color: #3a5040; font-weight: bold; }
+    .lb-table tr.gold   td { color: #ffe600; }
+    .lb-table tr.gold   td.score { color: #ffe600; text-shadow: 0 0 8px #ffe60066; }
+    .lb-table tr.silver td { color: #aaaacc; }
+    .lb-table tr.silver td.score { color: #aaaacc; }
+    .lb-table tr.bronze td { color: #cc8844; }
+    .lb-table tr.bronze td.score { color: #cc8844; }
+    .lb-table tr.highlight td { color: #00ff88 !important; }
+    .lb-table tr.highlight td.score { text-shadow: 0 0 8px #00ff8866; }
+    .lb-empty { font-size: 9px; color: #222; letter-spacing: 3px; text-align: center; padding: 16px 0; }
+
+    /* ── GAME ── */
+    #gameCanvas {
+      display: block;
+      border: 1px solid #0a0a1a;
+      box-shadow: 0 0 30px #00f5ff18;
+      background: #000;
+    }
+
+    /* ── Stats bar ── */
+    .stats-bar { display: flex; gap: 32px; justify-content: center; flex-wrap: wrap; }
+    .stat-item { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+    .stat-label { font-size: 8px; color: #333; letter-spacing: 3px; }
+    .stat-val { font-size: 22px; font-weight: bold; }
+    .stat-val.green  { color: #00ff88; text-shadow: 0 0 10px #00ff8866; }
+    .stat-val.yellow { color: #ffd700; text-shadow: 0 0 10px #ffd70066; }
+    .stat-val.red    { color: #ff2d78; text-shadow: 0 0 10px #ff2d7866; }
+    .stat-val.cyan   { color: #00f5ff; text-shadow: 0 0 10px #00f5ff66; }
+
+    /* ── Buttons ── */
+    .action-btn {
+      padding: 10px 32px; font-family: 'Courier New', monospace;
+      font-size: 12px; letter-spacing: 3px; cursor: pointer;
+      background: #080808; border: 1px solid #333; color: #555; transition: all .15s;
+    }
+    .action-btn:hover { border-color: #aaa; color: #aaa; }
+    .action-btn.primary { border-color: #ffe600; color: #ffe600; }
+    .action-btn.primary:hover { background: #ffe60018; box-shadow: 0 0 14px #ffe60044; }
+    .btn-row { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+
+    /* ── RESULT ── */
+    #resultScreen { gap: 14px; }
+    .result-title { font-size: clamp(28px, 6vw, 54px); font-weight: bold; letter-spacing: 4px; text-align: center; }
+    .result-sub   { font-size: 11px; letter-spacing: 3px; color: #555; text-align: center; }
+    .result-score { font-size: 20px; font-weight: bold; color: #00ff88; text-shadow: 0 0 12px #00ff8866; letter-spacing: 3px; }
+    .result-rank  { font-size: 11px; letter-spacing: 2px; color: #ffd700; text-shadow: 0 0 8px #ffd70066; min-height: 18px; text-align: center; }
+
+    /* ── Name Entry Modal ── */
+    #nameModal {
+      position: fixed; inset: 0; z-index: 100;
+      background: rgba(0,0,0,.88);
+      display: flex; align-items: center; justify-content: center;
+    }
+    #nameModal.hidden { display: none; }
+    .name-box {
+      background: #06000f;
+      border: 2px solid #cc00ff;
+      box-shadow: 0 0 40px #cc00ff44;
+      padding: 36px 40px;
+      display: flex; flex-direction: column; align-items: center; gap: 18px;
+      max-width: 380px; width: 90%;
+    }
+    .name-box h2 { font-size: 13px; color: #cc00ff; letter-spacing: 3px; text-align: center; text-shadow: 0 0 10px #cc00ff88; }
+    .name-box .sub { font-size: 9px; color: #555; letter-spacing: 2px; text-align: center; line-height: 2; }
+    .name-box .rank-badge { font-size: 11px; color: #ffd700; letter-spacing: 2px; border: 1px solid #ffd70055; padding: 4px 16px; }
+    #nameInput {
+      background: #000; border: 2px solid #cc00ff; color: #cc00ff;
+      font-family: 'Courier New', monospace;
+      font-size: 18px; letter-spacing: 6px; padding: 10px 16px;
+      text-align: center; text-transform: uppercase; width: 260px; outline: none;
+      box-shadow: 0 0 12px rgba(204,0,255,.2);
+    }
+    #nameInput::placeholder { color: #330044; letter-spacing: 3px; font-size: 12px; }
+    .name-submit {
+      padding: 10px 32px; font-family: 'Courier New', monospace;
+      font-size: 13px; letter-spacing: 3px; cursor: pointer;
+      background: transparent; border: 2px solid #cc00ff; color: #cc00ff;
+      transition: all .15s;
+    }
+    .name-submit:hover { background: #cc00ff22; box-shadow: 0 0 18px #cc00ff88; }
+    .name-skip { font-size: 9px; color: #333; letter-spacing: 2px; cursor: pointer; background: none; border: none; transition: color .15s; }
+    .name-skip:hover { color: #777; }
+
+    /* ── Controls hint ── */
+    .controls-hint { font-size: 9px; color: #222; letter-spacing: 2px; text-align: center; }
+  </style>
+</head>
+<body>
+<canvas id="bgCanvas"></canvas>
+
+<!-- ── Name Entry Modal ── -->
+<div id="nameModal" class="hidden">
+  <div class="name-box">
+    <h2>NEW HIGH SCORE!</h2>
+    <div class="rank-badge" id="modalRank"></div>
+    <div class="sub" id="modalSub"></div>
+    <input id="nameInput" maxlength="12" placeholder="ENTER NAME" autocomplete="off" spellcheck="false">
+    <button class="name-submit" onclick="submitName()">SAVE SCORE</button>
+    <button class="name-skip" onclick="skipName()">SKIP</button>
+  </div>
+</div>
+
+<div id="app">
+
+  <!-- ── MENU ── -->
+  <div id="menuScreen" class="screen">
+    <div class="top-bar">
+      <a class="home-btn" href="../index.html">← ARCADE</a>
+      <span></span>
+    </div>
+    <h1 class="game-title">FROGGER</h1>
+
+    <div class="menu-section-label">DIFFICULTY</div>
+    <div class="diff-btns">
+      <button class="diff-btn easy"   onclick="setDiff('easy',   this)">EASY</button>
+      <button class="diff-btn medium" onclick="setDiff('medium', this)">MEDIUM</button>
+      <button class="diff-btn hard"   onclick="setDiff('hard',   this)">HARD</button>
+    </div>
+    <div class="diff-info" id="diffInfo"></div>
+
+    <hr class="menu-divider">
+    <button class="start-btn" onclick="startGame()">START GAME</button>
+    <hr class="menu-divider">
+
+    <div class="lb-wrap">
+      <div class="lb-title" id="menuLbTitle">TOP SCORES</div>
+      <div id="menuLb"></div>
+    </div>
+
+    <a class="home-btn" href="../index.html" style="margin-top:8px">← BACK TO ARCADE</a>
+  </div>
+
+  <!-- ── GAME ── -->
+  <div id="gameScreen" class="screen" style="display:none">
+    <div class="top-bar">
+      <button class="action-btn" onclick="goMenu()">← MENU</button>
+      <div class="stats-bar">
+        <div class="stat-item">
+          <span class="stat-label">SCORE</span>
+          <span class="stat-val yellow" id="scScore">0</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">LIVES</span>
+          <span class="stat-val red" id="scLives">3</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">LEVEL</span>
+          <span class="stat-val cyan" id="scLevel">1</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">TIME</span>
+          <span class="stat-val green" id="scTime">60</span>
+        </div>
+      </div>
+      <button class="action-btn" onclick="startGame()">NEW</button>
+    </div>
+
+    <canvas id="gameCanvas" width="480" height="540"></canvas>
+    <div class="controls-hint">ARROW KEYS / WASD TO MOVE</div>
+  </div>
+
+  <!-- ── RESULT ── -->
+  <div id="resultScreen" class="screen" style="display:none">
+    <div class="top-bar">
+      <a class="home-btn" href="../index.html">← ARCADE</a>
+      <span></span>
+    </div>
+    <h1 class="game-title">FROGGER</h1>
+    <div class="result-title" id="resultTitle">GAME OVER</div>
+    <div class="result-sub"   id="resultSub"></div>
+    <div class="result-score" id="resultScore"></div>
+    <div class="result-rank"  id="resultRank"></div>
+
+    <div class="lb-wrap">
+      <div class="lb-title" id="resultLbTitle">TOP SCORES</div>
+      <div id="resultLb"></div>
+    </div>
+
+    <div class="btn-row">
+      <button class="action-btn primary" onclick="startGame()">PLAY AGAIN</button>
+      <button class="action-btn" onclick="goMenu()">MENU</button>
+      <a class="action-btn" href="../index.html">ARCADE</a>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════════
+//  STARFIELD BACKGROUND
+// ════════════════════════════════════════════════════════════
+(function() {
+  const canvas = document.getElementById('bgCanvas');
+  const ctx = canvas.getContext('2d');
+  let stars = [];
+
+  function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+  function initStars() {
+    stars = [];
+    for (let i = 0; i < 120; i++) {
+      stars.push({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        r: Math.random() * 1.2 + 0.2,
+        base: Math.random(),
+        speed: Math.random() * 0.5 + 0.2,
+        phase: Math.random() * Math.PI * 2
+      });
+    }
+  }
+  function drawStars(t) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    for (const s of stars) {
+      const alpha = 0.15 + 0.6 * (0.5 + 0.5 * Math.sin(t * s.speed + s.phase));
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255,255,255,${alpha.toFixed(3)})`;
+      ctx.fill();
+    }
+    requestAnimationFrame(drawStars);
+  }
+  resize();
+  initStars();
+  window.addEventListener('resize', () => { resize(); initStars(); });
+  requestAnimationFrame(drawStars);
+})();
+
+// ════════════════════════════════════════════════════════════
+//  CONSTANTS & CONFIG
+// ════════════════════════════════════════════════════════════
+const COLS = 12;
+const ROWS = 13;
+const CELL = 40; // px per cell
+const W = COLS * CELL;  // 480
+const H = ROWS * CELL;  // 520 — but we use 540 canvas with 10px pad top
+
+const LB_KEY = 'frogger_lb_v1';
+const LB_MAX = 10;
+
+const DIFF_CFG = {
+  easy: {
+    label: 'SLOW TRAFFIC · WIDE LOGS · 4 LIVES · 60 SEC/LEVEL',
+    lives: 4,
+    timeLimit: 60,
+    baseSpeed: 0.8,
+    logWidths: [4, 5, 3, 5, 4],
+    turtleWidths: [2, 2, 2, 2, 2],
+    hasCrocs: false
+  },
+  medium: {
+    label: 'MEDIUM SPEED · STANDARD LOGS · 3 LIVES · 45 SEC/LEVEL',
+    lives: 3,
+    timeLimit: 45,
+    baseSpeed: 1.3,
+    logWidths: [3, 4, 3, 4, 3],
+    turtleWidths: [2, 2, 2, 2, 2],
+    hasCrocs: false
+  },
+  hard: {
+    label: 'FAST TRAFFIC · NARROW LOGS · 3 LIVES · 30 SEC · CROCS',
+    lives: 3,
+    timeLimit: 30,
+    baseSpeed: 2.0,
+    logWidths: [2, 3, 2, 3, 2],
+    turtleWidths: [2, 2, 2, 2, 2],
+    hasCrocs: true
+  }
+};
+
+// Row index → type
+// Row 0: homes (top)
+// Rows 1-5: river
+// Row 6: median
+// Rows 7-11: road
+// Row 12: safe start (bottom)
+const ROW_HOME   = 0;
+const RIVER_ROWS = [1, 2, 3, 4, 5];
+const ROW_MEDIAN = 6;
+const ROAD_ROWS  = [7, 8, 9, 10, 11];
+const ROW_START  = 12;
+
+// River lane configs (relative to difficulty speed multiplier)
+// dir: 1=right, -1=left
+const RIVER_LANE_CFG = [
+  { dir: 1,  speedMult: 0.9,  type: 'log' },    // row 1
+  { dir: -1, speedMult: 1.1,  type: 'turtle' },  // row 2
+  { dir: 1,  speedMult: 0.7,  type: 'log' },    // row 3
+  { dir: -1, speedMult: 1.3,  type: 'log' },    // row 4
+  { dir: 1,  speedMult: 1.0,  type: 'turtle' }, // row 5
+];
+
+// Road lane configs
+const ROAD_LANE_CFG = [
+  { dir: -1, speedMult: 1.2,  carProb: 0.6 },  // row 7
+  { dir: 1,  speedMult: 0.9,  carProb: 0.4 },  // row 8
+  { dir: -1, speedMult: 1.4,  carProb: 0.7 },  // row 9
+  { dir: 1,  speedMult: 1.1,  carProb: 0.5 },  // row 10
+  { dir: -1, speedMult: 0.8,  carProb: 0.3 },  // row 11
+];
+
+// ════════════════════════════════════════════════════════════
+//  STATE
+// ════════════════════════════════════════════════════════════
+let STATE = {
+  phase: 'menu',   // 'menu' | 'game' | 'result' | 'dead'
+  difficulty: 'medium',
+  score: 0,
+  lives: 3,
+  level: 1,
+  timer: 45,
+  timerAcc: 0,
+  homes: [false, false, false, false, false],
+  frog: { col: 5, row: ROW_START, dir: 'up', onPlatform: null },
+  lanes: [],       // array of lane objects
+  deathAnim: 0,    // countdown for death flash
+  levelAnim: 0,    // countdown for level clear flash
+  paused: false,
+  lastTime: 0,
+  raf: null,
+  maxForwardRow: ROW_START
+};
+
+// ════════════════════════════════════════════════════════════
+//  LEADERBOARD
+// ════════════════════════════════════════════════════════════
+function loadLB() {
+  try { return JSON.parse(localStorage.getItem(LB_KEY)) || { easy: [], medium: [], hard: [] }; }
+  catch { return { easy: [], medium: [], hard: [] }; }
+}
+function saveLB(lb) { localStorage.setItem(LB_KEY, JSON.stringify(lb)); }
+
+function checkRank(diff, score) {
+  const lb = loadLB();
+  const list = lb[diff] || [];
+  if (list.length < LB_MAX || score > list[list.length - 1].score) {
+    let rank = 1;
+    for (const e of list) { if (score <= e.score) rank++; else break; }
+    return rank;
+  }
+  return null;
+}
+
+function insertScore(diff, name, score) {
+  const lb = loadLB();
+  const list = lb[diff] || [];
+  list.push({ name: name || 'UNKNOWN', score });
+  list.sort((a, b) => b.score - a.score);
+  lb[diff] = list.slice(0, LB_MAX);
+  saveLB(lb);
+}
+
+function renderLB(containerId, diff, highlightScore) {
+  const container = document.getElementById(containerId);
+  const lb = loadLB();
+  const list = (lb[diff] || []).slice(0, LB_MAX);
+  if (!list.length) {
+    container.innerHTML = '<div class="lb-empty">NO SCORES YET</div>';
+    return;
+  }
+  let html = `<table class="lb-table">
+    <thead><tr>
+      <th>#</th><th>NAME</th><th class="r">SCORE</th>
+    </tr></thead><tbody>`;
+  list.forEach((e, i) => {
+    const cls = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
+    const hi  = (highlightScore !== undefined && e.score === highlightScore) ? ' highlight' : '';
+    html += `<tr class="${cls}${hi}">
+      <td class="rank">${i + 1}</td>
+      <td class="name">${e.name}</td>
+      <td class="score">${e.score}</td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  container.innerHTML = html;
+}
+
+// ════════════════════════════════════════════════════════════
+//  SCREENS
+// ════════════════════════════════════════════════════════════
+function show(id) {
+  ['menuScreen','gameScreen','resultScreen'].forEach(s => {
+    document.getElementById(s).style.display = (s === id) ? '' : 'none';
+  });
+}
+
+function goMenu() {
+  cancelAnimationFrame(STATE.raf);
+  STATE.phase = 'menu';
+  show('menuScreen');
+  renderLB('menuLb', STATE.difficulty);
+  document.getElementById('menuLbTitle').textContent = 'TOP SCORES — ' + STATE.difficulty.toUpperCase();
+}
+
+function setDiff(d, btn) {
+  STATE.difficulty = d;
+  document.querySelectorAll('.diff-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('diffInfo').textContent = DIFF_CFG[d].label;
+  renderLB('menuLb', d);
+  document.getElementById('menuLbTitle').textContent = 'TOP SCORES — ' + d.toUpperCase();
+}
+
+// Auto-select medium on load
+window.addEventListener('DOMContentLoaded', () => {
+  const medBtn = document.querySelector('.diff-btn.medium');
+  setDiff('medium', medBtn);
+});
+
+// ════════════════════════════════════════════════════════════
+//  LANE GENERATION
+// ════════════════════════════════════════════════════════════
+function buildLanes(level) {
+  const cfg = DIFF_CFG[STATE.difficulty];
+  const speedScale = 1 + (level - 1) * 0.18;
+  const lanes = [];
+
+  // River lanes (rows 1-5)
+  RIVER_ROWS.forEach((row, i) => {
+    const lCfg = RIVER_LANE_CFG[i];
+    const speed = cfg.baseSpeed * lCfg.speedMult * speedScale * lCfg.dir * CELL;
+    const objects = [];
+    // Decide whether to use crocs on hard
+    let useType = lCfg.type;
+    if (cfg.hasCrocs && lCfg.type === 'log' && Math.random() < 0.4) useType = 'croc';
+
+    // Generate platform objects spread across width
+    let x = Math.random() * W;
+    const minGap = CELL * 1.5;
+    const maxObjects = 4;
+    for (let k = 0; k < maxObjects; k++) {
+      let w;
+      if (useType === 'turtle') {
+        w = cfg.turtleWidths[i % cfg.turtleWidths.length] * CELL;
+      } else {
+        w = cfg.logWidths[i % cfg.logWidths.length] * CELL;
+      }
+      objects.push({ x, w, type: useType });
+      x += w + minGap + Math.random() * CELL * 2;
+    }
+    lanes.push({ row, type: 'river', speed, objects, dir: lCfg.dir });
+  });
+
+  // Road lanes (rows 7-11)
+  ROAD_ROWS.forEach((row, i) => {
+    const lCfg = ROAD_LANE_CFG[i];
+    const speed = cfg.baseSpeed * lCfg.speedMult * speedScale * lCfg.dir * CELL;
+    const objects = [];
+    let x = Math.random() * W;
+    const maxVehicles = 4;
+    for (let k = 0; k < maxVehicles; k++) {
+      const isTruck = Math.random() > lCfg.carProb;
+      const w = isTruck ? CELL * 3 : CELL * 2;
+      const type = isTruck ? 'truck' : 'car';
+      objects.push({ x, w, type });
+      x += w + CELL * 1.5 + Math.random() * CELL * 2;
+    }
+    lanes.push({ row, type: 'road', speed, objects, dir: lCfg.dir });
+  });
+
+  return lanes;
+}
+
+// ════════════════════════════════════════════════════════════
+//  START / INIT LEVEL
+// ════════════════════════════════════════════════════════════
+function startGame() {
+  cancelAnimationFrame(STATE.raf);
+  const cfg = DIFF_CFG[STATE.difficulty];
+  STATE = {
+    phase: 'playing',
+    difficulty: STATE.difficulty,
+    score: 0,
+    lives: cfg.lives,
+    level: 1,
+    timer: cfg.timeLimit,
+    timerAcc: 0,
+    homes: [false, false, false, false, false],
+    frog: { col: 5, row: ROW_START, dir: 'up', onPlatform: null },
+    lanes: buildLanes(1),
+    deathAnim: 0,
+    levelAnim: 0,
+    paused: false,
+    lastTime: 0,
+    raf: null,
+    maxForwardRow: ROW_START
+  };
+  updateHUD();
+  show('gameScreen');
+  document.getElementById('gameCanvas').focus();
+  STATE.lastTime = performance.now();
+  STATE.raf = requestAnimationFrame(gameLoop);
+}
+
+function initLevel(level) {
+  const cfg = DIFF_CFG[STATE.difficulty];
+  STATE.level = level;
+  STATE.timer = cfg.timeLimit;
+  STATE.timerAcc = 0;
+  STATE.homes = [false, false, false, false, false];
+  STATE.frog = { col: 5, row: ROW_START, dir: 'up', onPlatform: null };
+  STATE.lanes = buildLanes(level);
+  STATE.maxForwardRow = ROW_START;
+  STATE.levelAnim = 0;
+  updateHUD();
+}
+
+// ════════════════════════════════════════════════════════════
+//  HUD
+// ════════════════════════════════════════════════════════════
+function updateHUD() {
+  document.getElementById('scScore').textContent = STATE.score;
+  document.getElementById('scLives').textContent = STATE.lives;
+  document.getElementById('scLevel').textContent = STATE.level;
+  document.getElementById('scTime').textContent = Math.ceil(STATE.timer);
+}
+
+// ════════════════════════════════════════════════════════════
+//  INPUT
+// ════════════════════════════════════════════════════════════
+const KEYS = {};
+document.addEventListener('keydown', e => {
+  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','w','a','s','d',
+       'W','A','S','D'].includes(e.key)) {
+    e.preventDefault();
+    if (STATE.phase === 'playing' && STATE.deathAnim <= 0 && STATE.levelAnim <= 0) {
+      moveFrog(e.key);
+    }
+  }
+});
+
+function moveFrog(key) {
+  const f = STATE.frog;
+  let dc = 0, dr = 0;
+  switch(key) {
+    case 'ArrowUp':    case 'w': case 'W': dr = -1; f.dir = 'up';    break;
+    case 'ArrowDown':  case 's': case 'S': dr =  1; f.dir = 'down';  break;
+    case 'ArrowLeft':  case 'a': case 'A': dc = -1; f.dir = 'left';  break;
+    case 'ArrowRight': case 'd': case 'D': dc =  1; f.dir = 'right'; break;
+  }
+  const newRow = f.row + dr;
+  const newCol = f.col + dc;
+
+  // Bounds check
+  if (newCol < 0 || newCol >= COLS) {
+    // Out of bounds left/right
+    if (RIVER_ROWS.includes(f.row)) {
+      // Death in river if moving off screen
+      triggerDeath();
+    }
+    return;
+  }
+  if (newRow < 0 || newRow > ROW_START) return;
+
+  f.col = newCol;
+  f.row = newRow;
+
+  // Score for moving forward
+  if (dr === -1 && f.row < STATE.maxForwardRow) {
+    STATE.score += 10;
+    STATE.maxForwardRow = f.row;
+    updateHUD();
+  }
+
+  // Detach from platform on any move
+  f.onPlatform = null;
+}
+
+// ════════════════════════════════════════════════════════════
+//  GAME LOOP
+// ════════════════════════════════════════════════════════════
+function gameLoop(ts) {
+  const dt = Math.min((ts - STATE.lastTime) / 1000, 0.1);
+  STATE.lastTime = ts;
+
+  if (STATE.phase === 'playing') {
+    update(dt);
+    draw();
+    STATE.raf = requestAnimationFrame(gameLoop);
+  }
+}
+
+function update(dt) {
+  // Death animation
+  if (STATE.deathAnim > 0) {
+    STATE.deathAnim -= dt;
+    if (STATE.deathAnim <= 0) {
+      STATE.deathAnim = 0;
+      if (STATE.lives <= 0) {
+        endGame(false);
+        return;
+      }
+      // Respawn
+      STATE.frog = { col: 5, row: ROW_START, dir: 'up', onPlatform: null };
+      STATE.maxForwardRow = ROW_START;
+    }
+    return;
+  }
+
+  // Level clear animation
+  if (STATE.levelAnim > 0) {
+    STATE.levelAnim -= dt;
+    if (STATE.levelAnim <= 0) {
+      STATE.levelAnim = 0;
+      if (STATE.level >= 5) {
+        endGame(true);
+        return;
+      }
+      initLevel(STATE.level + 1);
+    }
+    return;
+  }
+
+  // Timer
+  STATE.timerAcc += dt;
+  STATE.timer -= dt;
+  if (STATE.timer <= 0) {
+    STATE.timer = 0;
+    updateHUD();
+    triggerDeath();
+    return;
+  }
+  if (STATE.timerAcc >= 0.25) {
+    STATE.timerAcc = 0;
+    updateHUD();
+  }
+
+  // Move lanes
+  for (const lane of STATE.lanes) {
+    for (const obj of lane.objects) {
+      obj.x += lane.speed * dt;
+      // Wrap around
+      if (lane.speed > 0 && obj.x > W + obj.w) {
+        obj.x = -obj.w - Math.random() * CELL;
+      }
+      if (lane.speed < 0 && obj.x + obj.w < -CELL) {
+        obj.x = W + Math.random() * CELL;
+      }
+    }
+  }
+
+  // If frog is in river: move with platform or die
+  const frog = STATE.frog;
+  if (RIVER_ROWS.includes(frog.row)) {
+    const riverLane = STATE.lanes.find(l => l.row === frog.row);
+    if (riverLane) {
+      const frogPixelX = frog.col * CELL;
+      const frogCX = frogPixelX + CELL / 2;
+      const frogCY = frog.row * CELL + CELL / 2;
+
+      let onPlatform = false;
+      for (const obj of riverLane.objects) {
+        if (frogCX >= obj.x && frogCX <= obj.x + obj.w) {
+          // On this platform
+          if (obj.type === 'croc') {
+            // Head is right side if moving right, left side if moving left
+            const headZone = riverLane.speed > 0
+              ? (frogCX > obj.x + obj.w - CELL)
+              : (frogCX < obj.x + CELL);
+            if (headZone) {
+              // On croc head — die
+              triggerDeath();
+              return;
+            }
+          }
+          // Ride the platform
+          frog.col = Math.round((frogPixelX + riverLane.speed * dt) / CELL);
+          onPlatform = true;
+          break;
+        }
+      }
+
+      if (!onPlatform) {
+        triggerDeath();
+        return;
+      }
+
+      // Check out of bounds after riding
+      if (frog.col < 0 || frog.col >= COLS) {
+        triggerDeath();
+        return;
+      }
+    }
+  }
+
+  // If frog is on road: check collisions
+  if (ROAD_ROWS.includes(frog.row)) {
+    const roadLane = STATE.lanes.find(l => l.row === frog.row);
+    if (roadLane) {
+      const frogLeft  = frog.col * CELL + 4;
+      const frogRight = frog.col * CELL + CELL - 4;
+      for (const obj of roadLane.objects) {
+        if (frogRight > obj.x + 2 && frogLeft < obj.x + obj.w - 2) {
+          triggerDeath();
+          return;
+        }
+      }
+    }
+  }
+
+  // If frog reaches home row
+  if (frog.row === ROW_HOME) {
+    // Which slot? (5 slots evenly spaced across COLS=12: cols 1,3,5,7,9 → centers at 1.5, 3.5, etc)
+    // Home slots at col positions: 1, 3, 5, 7, 9 (center of each)
+    const homeSlotCols = [1, 3, 5, 7, 9];
+    let slotIdx = -1;
+    for (let i = 0; i < homeSlotCols.length; i++) {
+      if (Math.abs(frog.col - homeSlotCols[i]) <= 0) {
+        slotIdx = i;
+        break;
+      }
+    }
+    if (slotIdx >= 0 && !STATE.homes[slotIdx]) {
+      STATE.homes[slotIdx] = true;
+      STATE.score += 200;
+      STATE.score += Math.ceil(STATE.timer) * 10;
+      updateHUD();
+      // Reset frog
+      STATE.frog = { col: 5, row: ROW_START, dir: 'up', onPlatform: null };
+      STATE.maxForwardRow = ROW_START;
+      // Check all homes filled
+      if (STATE.homes.every(h => h)) {
+        STATE.score += 1000;
+        updateHUD();
+        STATE.levelAnim = 1.5;
+      }
+    } else if (slotIdx < 0 || STATE.homes[slotIdx]) {
+      // Landed outside a slot or on occupied slot
+      triggerDeath();
+    }
+  }
+}
+
+function triggerDeath() {
+  STATE.lives--;
+  STATE.deathAnim = 0.8;
+  updateHUD();
+}
+
+function endGame(completed) {
+  STATE.phase = 'result';
+  cancelAnimationFrame(STATE.raf);
+
+  document.getElementById('resultTitle').textContent = completed ? 'COMPLETE!' : 'GAME OVER';
+  document.getElementById('resultTitle').style.color = completed ? '#00ff88' : '#ff2d78';
+  document.getElementById('resultSub').textContent =
+    `DIFFICULTY: ${STATE.difficulty.toUpperCase()}  ·  LEVEL: ${STATE.level}`;
+  document.getElementById('resultScore').textContent = `SCORE: ${STATE.score}`;
+
+  const rank = checkRank(STATE.difficulty, STATE.score);
+  if (rank) {
+    document.getElementById('resultRank').textContent = `RANK #${rank} — LEADERBOARD ENTRY!`;
+    document.getElementById('modalRank').textContent = `RANK #${rank}`;
+    document.getElementById('modalSub').textContent =
+      `SCORE: ${STATE.score}\nDIFFICULTY: ${STATE.difficulty.toUpperCase()}`;
+    document.getElementById('nameModal').classList.remove('hidden');
+    document.getElementById('nameInput').value = '';
+    document.getElementById('nameInput').focus();
+    STATE._pendingRankDiff = STATE.difficulty;
+    STATE._pendingRankScore = STATE.score;
+  } else {
+    document.getElementById('resultRank').textContent = '';
+    showResult();
+  }
+}
+
+function showResult() {
+  renderLB('resultLb', STATE.difficulty, STATE._pendingRankScore);
+  document.getElementById('resultLbTitle').textContent = 'TOP SCORES — ' + STATE.difficulty.toUpperCase();
+  show('resultScreen');
+}
+
+function submitName() {
+  const name = (document.getElementById('nameInput').value || '').trim().toUpperCase() || 'UNKNOWN';
+  insertScore(STATE._pendingRankDiff, name, STATE._pendingRankScore);
+  document.getElementById('nameModal').classList.add('hidden');
+  showResult();
+}
+
+function skipName() {
+  document.getElementById('nameModal').classList.add('hidden');
+  showResult();
+}
+
+document.getElementById('nameInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') submitName();
+});
+
+// ════════════════════════════════════════════════════════════
+//  DRAW
+// ════════════════════════════════════════════════════════════
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const YOFF = 10; // vertical offset to center in 540px canvas (13 rows * 40 = 520, + 10 + 10 = 540)
+
+function rowY(row) { return YOFF + row * CELL; }
+
+function draw() {
+  ctx.clearRect(0, 0, W, 540);
+
+  // Background rows
+  for (let row = 0; row < ROWS; row++) {
+    const y = rowY(row);
+    if (row === ROW_HOME) {
+      ctx.fillStyle = '#001a00';
+    } else if (RIVER_ROWS.includes(row)) {
+      ctx.fillStyle = '#000d1a';
+    } else if (row === ROW_MEDIAN) {
+      ctx.fillStyle = '#0a0a0a';
+    } else if (ROAD_ROWS.includes(row)) {
+      ctx.fillStyle = '#0d0d0d';
+    } else {
+      ctx.fillStyle = '#0a0a0a';
+    }
+    ctx.fillRect(0, y, W, CELL);
+  }
+
+  // River water effect
+  for (const row of RIVER_ROWS) {
+    const y = rowY(row);
+    ctx.fillStyle = '#001428';
+    ctx.fillRect(0, y, W, CELL);
+    // Wave lines
+    ctx.strokeStyle = '#002244';
+    ctx.lineWidth = 1;
+    for (let wx = 0; wx < W; wx += 20) {
+      ctx.beginPath();
+      ctx.moveTo(wx, y + CELL / 2);
+      ctx.lineTo(wx + 10, y + CELL / 2 - 2);
+      ctx.lineTo(wx + 20, y + CELL / 2);
+      ctx.stroke();
+    }
+  }
+
+  // Road lane lines
+  for (let row of ROAD_ROWS) {
+    const y = rowY(row);
+    ctx.strokeStyle = '#1a1a1a';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([8, 8]);
+    ctx.beginPath();
+    ctx.moveTo(0, y + CELL);
+    ctx.lineTo(W, y + CELL);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // Home slots
+  const homeSlotCols = [1, 3, 5, 7, 9];
+  const homeY = rowY(ROW_HOME);
+  // Draw entire row gaps first
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, homeY, W, CELL);
+  for (let i = 0; i < 5; i++) {
+    const sc = homeSlotCols[i];
+    const sx = sc * CELL + 2;
+    const sw = CELL - 4;
+    if (STATE.homes[i]) {
+      ctx.fillStyle = '#003300';
+      ctx.fillRect(sx, homeY + 2, sw, CELL - 4);
+      ctx.strokeStyle = '#00ff88';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(sx, homeY + 2, sw, CELL - 4);
+      // Frog silhouette in slot
+      ctx.fillStyle = '#00ff88';
+      ctx.beginPath();
+      ctx.arc(sc * CELL + CELL / 2, homeY + CELL / 2, 8, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      ctx.fillStyle = '#002200';
+      ctx.fillRect(sx, homeY + 2, sw, CELL - 4);
+      ctx.strokeStyle = '#004400';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(sx, homeY + 2, sw, CELL - 4);
+    }
+  }
+
+  // Median strip
+  const medY = rowY(ROW_MEDIAN);
+  ctx.fillStyle = '#111';
+  ctx.fillRect(0, medY, W, CELL);
+  ctx.strokeStyle = '#222';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath();
+  ctx.moveTo(0, medY + CELL / 2);
+  ctx.lineTo(W, medY + CELL / 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Safe start row
+  const startY = rowY(ROW_START);
+  ctx.fillStyle = '#0a0a00';
+  ctx.fillRect(0, startY, W, CELL);
+
+  // Draw lane objects
+  for (const lane of STATE.lanes) {
+    const y = rowY(lane.row);
+    for (const obj of lane.objects) {
+      drawLaneObject(obj, obj.x, y, lane);
+    }
+  }
+
+  // Draw frog
+  drawFrog();
+
+  // Death flash overlay
+  if (STATE.deathAnim > 0) {
+    const alpha = Math.sin(STATE.deathAnim * Math.PI * 8) * 0.3 * (STATE.deathAnim / 0.8);
+    ctx.fillStyle = `rgba(255,45,120,${Math.max(0, alpha)})`;
+    ctx.fillRect(0, 0, W, 540);
+  }
+
+  // Level clear overlay
+  if (STATE.levelAnim > 0) {
+    const alpha = 0.25 * (STATE.levelAnim / 1.5);
+    ctx.fillStyle = `rgba(0,255,136,${alpha})`;
+    ctx.fillRect(0, 0, W, 540);
+    ctx.fillStyle = '#ffe600';
+    ctx.font = `bold ${CELL}px 'Courier New', monospace`;
+    ctx.textAlign = 'center';
+    ctx.fillText('LEVEL CLEAR!', W / 2, 540 / 2);
+  }
+
+  // Timer bar at bottom
+  const timerCfg = DIFF_CFG[STATE.difficulty];
+  const timerFrac = Math.max(0, STATE.timer / timerCfg.timeLimit);
+  const barH = 6;
+  ctx.fillStyle = '#111';
+  ctx.fillRect(0, 540 - barH, W, barH);
+  const barColor = timerFrac > 0.5 ? '#00ff88' : timerFrac > 0.25 ? '#ffaa00' : '#ff2d78';
+  ctx.fillStyle = barColor;
+  ctx.fillRect(0, 540 - barH, W * timerFrac, barH);
+}
+
+function drawLaneObject(obj, x, y, lane) {
+  const h = CELL - 4;
+  const yOff = 2;
+
+  if (obj.type === 'log') {
+    // Brown log
+    const grad = ctx.createLinearGradient(x, y + yOff, x, y + yOff + h);
+    grad.addColorStop(0, '#a0612a');
+    grad.addColorStop(0.4, '#8B4513');
+    grad.addColorStop(1, '#5c2e0a');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    roundRect(ctx, x + 1, y + yOff, obj.w - 2, h, 4);
+    ctx.fill();
+    // Grain lines
+    ctx.strokeStyle = '#6b3410';
+    ctx.lineWidth = 1;
+    for (let gx = x + 10; gx < x + obj.w - 4; gx += 12) {
+      ctx.beginPath();
+      ctx.moveTo(gx, y + yOff + 3);
+      ctx.lineTo(gx, y + yOff + h - 3);
+      ctx.stroke();
+    }
+    // End caps
+    ctx.fillStyle = '#5c2e0a';
+    ctx.beginPath();
+    roundRect(ctx, x + 1, y + yOff, 6, h, 4);
+    ctx.fill();
+    ctx.beginPath();
+    roundRect(ctx, x + obj.w - 7, y + yOff, 6, h, 4);
+    ctx.fill();
+  } else if (obj.type === 'croc') {
+    // Crocodile — dark green, menacing
+    const grad = ctx.createLinearGradient(x, y + yOff, x, y + yOff + h);
+    grad.addColorStop(0, '#1a4a1a');
+    grad.addColorStop(1, '#0a2a0a');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    roundRect(ctx, x + 1, y + yOff, obj.w - 2, h, 4);
+    ctx.fill();
+    // Scales pattern
+    ctx.fillStyle = '#143a14';
+    for (let gx = x + 4; gx < x + obj.w - 8; gx += 8) {
+      ctx.beginPath();
+      ctx.ellipse(gx + 4, y + yOff + h / 2, 3, 4, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // Head (danger zone) — red eyes
+    const headX = lane.speed > 0 ? x + obj.w - CELL : x;
+    ctx.fillStyle = '#ff2d78';
+    ctx.beginPath();
+    ctx.arc(headX + (lane.speed > 0 ? CELL - 8 : 8), y + yOff + 6, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(headX + (lane.speed > 0 ? CELL - 8 : 8), y + yOff + h - 6, 3, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (obj.type === 'turtle') {
+    // Turtles — green circles/ovals
+    const turtleCount = Math.round(obj.w / CELL);
+    for (let t = 0; t < turtleCount; t++) {
+      const tx = x + t * CELL;
+      const tcx = tx + CELL / 2;
+      const tcy = y + CELL / 2;
+      // Shell
+      ctx.fillStyle = '#1a6b1a';
+      ctx.beginPath();
+      ctx.ellipse(tcx, tcy, CELL / 2 - 3, CELL / 2 - 5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#00aa44';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      // Shell pattern
+      ctx.strokeStyle = '#2a8b2a';
+      ctx.beginPath();
+      ctx.moveTo(tcx, tcy - 6);
+      ctx.lineTo(tcx, tcy + 6);
+      ctx.moveTo(tcx - 6, tcy);
+      ctx.lineTo(tcx + 6, tcy);
+      ctx.stroke();
+      // Head
+      const headDx = lane.speed > 0 ? 8 : -8;
+      ctx.fillStyle = '#22aa22';
+      ctx.beginPath();
+      ctx.arc(tcx + headDx, tcy, 5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else if (obj.type === 'car') {
+    // Pink car — 2 cells wide
+    const grad = ctx.createLinearGradient(x, y + yOff, x, y + yOff + h);
+    grad.addColorStop(0, '#ff6080');
+    grad.addColorStop(0.5, '#ff2d78');
+    grad.addColorStop(1, '#aa1050');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    roundRect(ctx, x + 2, y + yOff, obj.w - 4, h, 5);
+    ctx.fill();
+    // Windows
+    ctx.fillStyle = '#220010';
+    const winW = CELL * 0.5;
+    const winH = h * 0.35;
+    const winY = y + yOff + h * 0.2;
+    ctx.beginPath();
+    roundRect(ctx, x + obj.w / 2 - winW / 2 - CELL * 0.3, winY, winW, winH, 2);
+    ctx.fill();
+    ctx.beginPath();
+    roundRect(ctx, x + obj.w / 2 - winW / 2 + CELL * 0.3, winY, winW, winH, 2);
+    ctx.fill();
+    // Wheels
+    ctx.fillStyle = '#111';
+    ctx.beginPath(); ctx.arc(x + 10, y + yOff + h + 1, 4, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x + obj.w - 10, y + yOff + h + 1, 4, 0, Math.PI * 2); ctx.fill();
+    // Headlights
+    const headLt = lane.speed < 0 ? x + 3 : x + obj.w - 8;
+    ctx.fillStyle = '#fffaa0';
+    ctx.fillRect(headLt, y + yOff + 4, 5, 4);
+    ctx.fillRect(headLt, y + yOff + h - 8, 5, 4);
+  } else if (obj.type === 'truck') {
+    // Cyan truck — 3 cells wide
+    const grad = ctx.createLinearGradient(x, y + yOff, x, y + yOff + h);
+    grad.addColorStop(0, '#00e5ee');
+    grad.addColorStop(0.5, '#00b8cc');
+    grad.addColorStop(1, '#007080');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    roundRect(ctx, x + 2, y + yOff, obj.w - 4, h, 5);
+    ctx.fill();
+    // Cab
+    const cabX = lane.speed > 0 ? x + obj.w - CELL : x;
+    ctx.fillStyle = '#00d4e8';
+    ctx.beginPath();
+    roundRect(ctx, cabX + 2, y + yOff + 2, CELL - 4, h - 4, 4);
+    ctx.fill();
+    // Window
+    ctx.fillStyle = '#003a44';
+    ctx.beginPath();
+    roundRect(ctx, cabX + 5, y + yOff + 5, CELL - 10, h * 0.4, 2);
+    ctx.fill();
+    // Cargo stripes
+    ctx.strokeStyle = '#008899';
+    ctx.lineWidth = 1.5;
+    const cargoStart = lane.speed > 0 ? x + 4 : x + CELL + 2;
+    const cargoW = obj.w - CELL - 6;
+    for (let sx = cargoStart + 6; sx < cargoStart + cargoW; sx += 10) {
+      ctx.beginPath();
+      ctx.moveTo(sx, y + yOff + 3);
+      ctx.lineTo(sx, y + yOff + h - 3);
+      ctx.stroke();
+    }
+    // Wheels
+    ctx.fillStyle = '#002a30';
+    for (let wx = 0; wx < 3; wx++) {
+      ctx.beginPath();
+      ctx.arc(x + 12 + wx * CELL, y + yOff + h + 1, 5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+}
+
+function roundRect(c, x, y, w, h, r) {
+  c.beginPath();
+  c.moveTo(x + r, y);
+  c.lineTo(x + w - r, y);
+  c.quadraticCurveTo(x + w, y, x + w, y + r);
+  c.lineTo(x + w, y + h - r);
+  c.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  c.lineTo(x + r, y + h);
+  c.quadraticCurveTo(x, y + h, x, y + h - r);
+  c.lineTo(x, y + r);
+  c.quadraticCurveTo(x, y, x + r, y);
+  c.closePath();
+}
+
+function drawFrog() {
+  if (STATE.deathAnim > 0) {
+    // Flash frog red during death
+    const flash = Math.sin(STATE.deathAnim * Math.PI * 12) > 0;
+    if (!flash) return;
+  }
+
+  const f = STATE.frog;
+  const cx = f.col * CELL + CELL / 2;
+  const cy = rowY(f.row) + CELL / 2;
+  const r = CELL / 2 - 5;
+
+  ctx.save();
+  ctx.translate(cx, cy);
+
+  // Rotate based on direction
+  const angles = { up: 0, down: Math.PI, left: -Math.PI / 2, right: Math.PI / 2 };
+  ctx.rotate(angles[f.dir] || 0);
+
+  // Body
+  ctx.fillStyle = '#22cc22';
+  ctx.beginPath();
+  ctx.ellipse(0, 0, r, r - 2, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Darker belly
+  ctx.fillStyle = '#44ee44';
+  ctx.beginPath();
+  ctx.ellipse(0, 2, r - 4, r - 6, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Eyes (top of frog = up direction)
+  ctx.fillStyle = '#00ff00';
+  ctx.beginPath();
+  ctx.arc(-5, -r + 3, 4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(5, -r + 3, 4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#003300';
+  ctx.beginPath();
+  ctx.arc(-5, -r + 3, 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(5, -r + 3, 2, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Front legs
+  ctx.strokeStyle = '#1a9a1a';
+  ctx.lineWidth = 3;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(-r + 2, -3);
+  ctx.lineTo(-r - 3, -8);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(r - 2, -3);
+  ctx.lineTo(r + 3, -8);
+  ctx.stroke();
+
+  // Back legs
+  ctx.beginPath();
+  ctx.moveTo(-r + 2, 5);
+  ctx.lineTo(-r - 4, 10);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(r - 2, 5);
+  ctx.lineTo(r + 4, 10);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+// ════════════════════════════════════════════════════════════
+//  INIT
+// ════════════════════════════════════════════════════════════
+show('menuScreen');
+</script>
+</body>
+</html>
