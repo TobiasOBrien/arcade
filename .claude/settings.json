@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(open /Users/tobiasobrien/Projects/arcade/word-search/index.html)",
+      "Bash(open /Users/tobiasobrien/Projects/arcade/crossword/index.html)"
+    ],
+    "additionalDirectories": [
+      "/Users/tobiasobrien/Projects/arcade"
+    ]
+  }
+}
