@@ -377,6 +377,15 @@
       <a href="tetris/index.html" class="play-btn" onclick="event.stopPropagation()">▶ PLAY NOW</a>
     </div>
 
+    <!-- Slots Card -->
+    <div class="game-card yellow-card" onclick="location.href='../slots/index.html'">
+      <div class="preview-wrap"><canvas id="slCanvas" width="280" height="160"></canvas></div>
+      <h2 class="card-title">LUCKY 7s PALACE</h2>
+      <p class="card-desc">SPIN THE REELS AND STRIKE<br>IT RICH! BUY BONUS FEATURES,<br>FREE SPINS &amp; PRIZE HUNTS!</p>
+      <div class="card-meta">JACKPOT ● BUY FEATURE ● STICKY WILDS ● FREE SPINS</div>
+      <a href="../slots/index.html" class="play-btn" onclick="event.stopPropagation()">▶ PLAY NOW</a>
+    </div>
+
   </main>
 
   <div class="divider">· · · · · · · · · · · · · · · · · · · ·</div>
@@ -1211,6 +1220,120 @@ function drawCWPv() {
   requestAnimationFrame(drawCWPv);
 }
 drawCWPv();
+
+// ── Lucky 7s Slots Preview Canvas ────────────────────────────────────────────
+const slCtx = document.getElementById('slCanvas').getContext('2d');
+const SL_SYMS  = ['7', '◆', '♥', '♣', '★', '⬟', '●', '♦'];
+const SL_GLOWS = ['#ffe600','#00f5ff','#ff2d78','#00ff88','#ffe600','#cc00ff','#ff8800','#66aaff'];
+const SL_SEQ = [
+  [0,2,4,1,6,3,7,5],
+  [3,0,6,2,5,0,1,4],
+  [5,1,7,4,0,6,3,2],
+];
+const SL_LEN = SL_SEQ[0].length;
+let slOff = [0, 2.7, 5.3];
+let slSpd = [0, 0, 0];
+let slPhase = 'pause';
+let slTick  = 0;
+let slWin   = false;
+const SL_RX = [8, 100, 193], SL_RW = 76, SL_SH = 50;
+const SL_CX = 280, SL_CY = 160;
+
+function slSym(reel, pos) {
+  return SL_SEQ[reel][((Math.floor(pos) % SL_LEN) + SL_LEN) % SL_LEN];
+}
+
+function drawSL() {
+  slCtx.fillStyle = '#08000e';
+  slCtx.fillRect(0, 0, SL_CX, SL_CY);
+
+  slTick++;
+
+  // Phase machine
+  if      (slPhase === 'pause' && slTick > 55)  { slPhase='spin';  slTick=0; slSpd=[0.38,0.42,0.35]; slWin=Math.random()>0.45; }
+  else if (slPhase === 'spin'  && slTick > 105) { slPhase='stop0'; slTick=0; }
+  else if (slPhase === 'stop0' && slTick > 20)  {
+    slOff[0] = slWin ? 0 : Math.round(slOff[0]); slSpd[0]=0; slPhase='stop1'; slTick=0;
+  }
+  else if (slPhase === 'stop1' && slTick > 20)  {
+    const want = slWin ? SL_SEQ[1].indexOf(SL_SEQ[0][slOff[0] % SL_LEN]) : Math.round(slOff[1]);
+    slOff[1] = want >= 0 ? want : Math.round(slOff[1]); slSpd[1]=0; slPhase='stop2'; slTick=0;
+  }
+  else if (slPhase === 'stop2' && slTick > 20)  {
+    const want = slWin ? SL_SEQ[2].indexOf(SL_SEQ[0][slOff[0] % SL_LEN]) : Math.round(slOff[2]);
+    slOff[2] = want >= 0 ? want : Math.round(slOff[2]); slSpd[2]=0; slPhase='show'; slTick=0;
+  }
+  else if (slPhase === 'show'  && slTick > 90)  { slPhase='pause'; slTick=0; }
+
+  for (let i = 0; i < 3; i++) slOff[i] += slSpd[i];
+
+  // Reel backgrounds + separators
+  slCtx.strokeStyle = 'rgba(255,180,0,0.45)';
+  slCtx.lineWidth = 2;
+  for (let ri = 0; ri < 3; ri++) {
+    const rx = SL_RX[ri];
+    slCtx.fillStyle = 'rgba(18,6,0,0.92)';
+    slCtx.fillRect(rx, 0, SL_RW, SL_CY);
+    if (ri > 0) { slCtx.beginPath(); slCtx.moveTo(rx-1,0); slCtx.lineTo(rx-1,SL_CY); slCtx.stroke(); }
+  }
+
+  // Draw symbols
+  for (let ri = 0; ri < 3; ri++) {
+    const rx = SL_RX[ri], frac = slOff[ri] % 1;
+    slCtx.save();
+    slCtx.beginPath(); slCtx.rect(rx+1, 0, SL_RW-2, SL_CY); slCtx.clip();
+    for (let si = -1; si <= 2; si++) {
+      const idx = slSym(ri, Math.floor(slOff[ri]) + si);
+      const sym = SL_SYMS[idx], col = SL_GLOWS[idx];
+      const y   = SL_CY/2 + (si - frac) * SL_SH - SL_SH/2;
+      if (y + SL_SH < 0 || y > SL_CY) continue;
+      const onLine = slSpd[ri] === 0 && Math.abs(y - (SL_CY/2 - SL_SH/2)) < 8;
+      slCtx.globalAlpha  = slSpd[ri] > 0 ? 0.6 : 1;
+      slCtx.shadowColor  = col;
+      slCtx.shadowBlur   = (slPhase === 'show' && onLine) ? 22 : 5;
+      slCtx.font         = `bold 26px Courier New`;
+      slCtx.textAlign    = 'center';
+      slCtx.textBaseline = 'middle';
+      slCtx.fillStyle    = col;
+      slCtx.fillText(sym, rx + SL_RW/2, y + SL_SH/2);
+    }
+    slCtx.shadowBlur = 0; slCtx.globalAlpha = 1;
+    // Edge fade when spinning
+    if (slSpd[ri] > 0) {
+      const grd = slCtx.createLinearGradient(rx, 0, rx, SL_CY);
+      grd.addColorStop(0,    'rgba(8,0,14,0.88)');
+      grd.addColorStop(0.22, 'rgba(8,0,14,0)');
+      grd.addColorStop(0.78, 'rgba(8,0,14,0)');
+      grd.addColorStop(1,    'rgba(8,0,14,0.88)');
+      slCtx.fillStyle = grd; slCtx.fillRect(rx, 0, SL_RW, SL_CY);
+    }
+    slCtx.restore();
+  }
+
+  // Payline
+  const pyY = SL_CY / 2;
+  const pa  = slPhase === 'show' ? 0.75 + 0.25 * Math.sin(slTick * 0.28) : 0.38;
+  slCtx.strokeStyle = `rgba(255,230,0,${pa})`;
+  slCtx.lineWidth   = slPhase === 'show' ? 2 : 1;
+  slCtx.setLineDash([5, 4]);
+  slCtx.beginPath(); slCtx.moveTo(0, pyY); slCtx.lineTo(SL_CX, pyY); slCtx.stroke();
+  slCtx.setLineDash([]);
+
+  // Win flash + banner
+  if (slPhase === 'show' && slWin) {
+    slCtx.fillStyle = `rgba(255,220,0,${0.1 + 0.07 * Math.sin(slTick * 0.3)})`;
+    slCtx.fillRect(0, 0, SL_CX, SL_CY);
+    slCtx.fillStyle   = '#ffe600';
+    slCtx.shadowColor = '#ffe600'; slCtx.shadowBlur = 18;
+    slCtx.font        = 'bold 12px "Courier New"';
+    slCtx.textAlign   = 'center'; slCtx.textBaseline = 'top';
+    slCtx.fillText('★ WIN! ★', SL_CX/2, 7);
+    slCtx.shadowBlur  = 0;
+  }
+
+  requestAnimationFrame(drawSL);
+}
+drawSL();
 </script>
 </body>
 </html>
